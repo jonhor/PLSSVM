@@ -917,7 +917,7 @@ template <typename T, layout_type layout>
     const size_type res_num_cols = res.num_cols();
     const size_type lhs_num_cols = lhs.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs, res)
+#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs, res) firstprivate(res_num_rows, res_num_cols, lhs_num_cols)
     for (size_type row = 0; row < res_num_rows; ++row) {
         for (size_type col = 0; col < res_num_cols; ++col) {
             T temp{ 0.0 };
