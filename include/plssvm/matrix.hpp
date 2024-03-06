@@ -492,10 +492,12 @@ matrix<T, layout_>::matrix(const matrix<T, other_layout_> &other) :
         // same layout -> simply memcpy underlying array
         std::memcpy(this->data(), other.data(), this->size_padded() * sizeof(value_type));
     } else {
-// convert AoS -> SoA or SoA -> AoS
+        // convert AoS -> SoA or SoA -> AoS
+        const size_type nr_rows = shape_.x;
+        const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < this->num_rows(); ++row) {
-            for (size_type col = 0; col < this->num_cols(); ++col) {
+        for (size_type row = 0; row < nr_rows; ++row) {
+            for (size_type col = 0; col < nr_cols; ++col) {
                 (*this)(row, col) = other(row, col);
             }
         }
@@ -513,12 +515,12 @@ matrix<T, layout_>::matrix(const matrix<value_type, other_layout_> &other, const
         // same layout but different padding -> memcpy each row separately
         this->opt_mismatched_padding_copy(this->data(), this->shape_padded(), other.data(), other.shape_padded());
     } else {
-// convert AoS -> SoA or SoA -> AoS or manual copy because of mismatching padding sizes
+        // convert AoS -> SoA or SoA -> AoS or manual copy because of mismatching padding sizes
         const size_type nr_rows = shape_.x;
         const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < nr_rows; ++row) {
-            for (size_type col = 0; col < nr_cols; ++col) {
+        for (size_type row = 0; row < this->num_rows(); ++row) {
+            for (size_type col = 0; col < this->num_cols(); ++col) {
                 (*this)(row, col) = other(row, col);
             }
         }
@@ -960,7 +962,6 @@ template <typename T, layout_type layout>
     }
     return matr;
 }
-
 
 /**
  * @brief Typedef for a matrix in Array-of-Struct (AoS) layout.
