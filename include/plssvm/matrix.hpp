@@ -515,8 +515,8 @@ matrix<T, layout_>::matrix(const matrix<value_type, other_layout_> &other, const
     } else {
 // convert AoS -> SoA or SoA -> AoS or manual copy because of mismatching padding sizes
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < this->num_rows(); ++row) {
-            for (size_type col = 0; col < this->num_cols(); ++col) {
+        for (long long row = 0; row < static_cast<long long>(this->num_rows()); ++row) {
+            for (long long col = 0; col < static_cast<long long>(this->num_cols()); ++col) {
                 (*this)(row, col) = other(row, col);
             }
         }
