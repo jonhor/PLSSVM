@@ -493,9 +493,11 @@ matrix<T, layout_>::matrix(const matrix<T, other_layout_> &other) :
         std::memcpy(this->data(), other.data(), this->size_padded() * sizeof(value_type));
     } else {
         // convert AoS -> SoA or SoA -> AoS
+        const size_type nr_rows = shape_.x;
+        const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < shape_.x; ++row) {
-            for (size_type col = 0; col < shape_.y; ++col) {
+        for (size_type row = 0; row < nr_rows; ++row) {
+            for (size_type col = 0; col < nr_cols; ++col) {
                 (*this)(row, col) = other(row, col);
             }
         }
@@ -514,9 +516,11 @@ matrix<T, layout_>::matrix(const matrix<value_type, other_layout_> &other, const
         this->opt_mismatched_padding_copy(this->data(), this->shape_padded(), other.data(), other.shape_padded());
     } else {
         // convert AoS -> SoA or SoA -> AoS or manual copy because of mismatching padding sizes
+        const size_type nr_rows = shape_.x;
+        const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < shape_.x; ++row) {
-            for (size_type col = 0; col < shape_.y; ++col) {
+        for (size_type row = 0; row < nr_rows; ++row) {
+            for (size_type col = 0; col < nr_cols; ++col) {
                 (*this)(row, col) = other(row, col);
             }
         }
@@ -553,10 +557,12 @@ matrix<T, layout_>::matrix(const std::vector<std::vector<value_type>> &data, con
                 std::memcpy(this->data() + row * this->num_cols_padded(), data[row].data(), this->num_cols() * sizeof(value_type));
             }
         } else {
-// explicitly iterate all elements otherwise
+            // explicitly iterate all elements otherwise
+            const size_type nr_rows = shape_.x;
+            const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-            for (size_type row = 0; row < shape_.x; ++row) {
-                for (size_type col = 0; col < shape_.y; ++col) {
+            for (size_type row = 0; row < nr_rows; ++row) {
+                for (size_type col = 0; col < nr_cols; ++col) {
                     (*this)(row, col) = data[row][col];
                 }
             }
@@ -667,10 +673,12 @@ auto matrix<T, layout_>::to_2D_vector() const -> std::vector<std::vector<value_t
             std::memcpy(ret[row].data(), this->data() + row * this->num_cols_padded(), this->num_cols() * sizeof(value_type));
         }
     } else {
-// explicitly iterate all elements otherwise
+        // explicitly iterate all elements otherwise
+        const size_type nr_rows = shape_.x;
+        const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < shape_.x; ++row) {
-            for (size_type col = 0; col < shape_.y; ++col) {
+        for (size_type row = 0; row < nr_rows; ++row) {
+            for (size_type col = 0; col < nr_cols; ++col) {
                 ret[row][col] = (*this)(row, col);
             }
         }
@@ -688,10 +696,12 @@ auto matrix<T, layout_>::to_2D_vector_padded() const -> std::vector<std::vector<
             std::memcpy(ret[row].data(), this->data() + row * this->num_cols_padded(), this->num_cols_padded() * sizeof(value_type));
         }
     } else {
-// explicitly iterate all elements otherwise
+        // explicitly iterate all elements otherwise
+        const size_type nr_rows = shape_.x;
+        const size_type nr_cols = shape_.y;
 #pragma omp parallel for collapse(2)
-        for (size_type row = 0; row < shape_.x; ++row) {
-            for (size_type col = 0; col < shape_.y; ++col) {
+        for (size_type row = 0; row < nr_rows; ++row) {
+            for (size_type col = 0; col < nr_cols; ++col) {
                 ret[row][col] = (*this)(row, col);
             }
         }
