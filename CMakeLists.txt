@@ -185,8 +185,10 @@ find_package(OpenMP 4.0 QUIET)
 if (OpenMP_FOUND)
     message(STATUS "Found OpenMP ${OpenMP_CXX_VERSION} to speed-up library utilities (like file parsing).")
     set(PLSSVM_FOUND_OPENMP_FOR_UTILITY "${OpenMP_CXX_VERSION}")
-    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC OpenMP::OpenMP_CXX -fopenmp)
-    target_compile_options(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fopenmp>)
+    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>)
+    # special command line options for MSVC:
+    # -openmp:llvm -> enables unsigned loop indexes in OpenMP parallel for loops
+    # -openmp:experimental -> enables OpenMP's SIMD instructions
     target_compile_options(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:-openmp:llvm -openmp:experimental>)
 else ()
     # disable warning for unknown OpenMP pragmas if no OpenMP could be found
