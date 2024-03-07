@@ -35,3 +35,4 @@ jobs:
         run: |
           cd PLSSVM/build
           ctest -j 2 -E ".*executable.*" --output-on-failure -C ${{ matrix.build_type }}
+          ctest --rerun-failed -V
