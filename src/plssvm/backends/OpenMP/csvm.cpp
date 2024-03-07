@@ -96,7 +96,7 @@ std::vector<::plssvm::detail::move_only_any> csvm::assemble_kernel_matrix(const 
     const aos_matrix<real_type> aos_data{ A };
 
     std::vector<::plssvm::detail::move_only_any> kernel_matrices_parts(this->num_available_devices());
-    const real_type cost = real_type{ 1.0 } / params.cost;
+    const real_type cost = real_type{ 1.0 } / params.cost.value();
 
     if (solver == solver_type::cg_explicit) {
         const plssvm::detail::triangular_data_distribution dist{ A.num_rows() - 1, this->num_available_devices() };
