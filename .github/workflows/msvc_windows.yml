@@ -10,8 +10,6 @@ jobs:
     steps:
       - name: "Install latest MSVC compiler"
         uses: ilammy/msvc-dev-cmd@v1.12.1
-        with:
-          toolset: "19.37"
       - name: "Install cmake 3.25.2"
         uses: lukka/get-cmake@v3.25.2
       - name: "Clone the PLSSVM repository into PLSSVM/"
@@ -36,4 +34,4 @@ jobs:
       - name: "Run tests"
         run: |
           cd PLSSVM/build
-          ctest -j 2 -E ".*Exceptions\.|SourceLocation|.*executable.*" --output-on-failure -C ${{ matrix.build_type }}
+          ctest -j 2 -E ".*executable.*" --output-on-failure -C ${{ matrix.build_type }}

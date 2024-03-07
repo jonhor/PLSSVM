@@ -495,7 +495,7 @@ matrix<T, layout_>::matrix(const matrix<T, other_layout_> &other) :
         // convert AoS -> SoA or SoA -> AoS
         const size_type nr_rows = shape_.x;
         const size_type nr_cols = shape_.y;
-#pragma omp parallel for collapse(2)
+//#pragma omp parallel for collapse(2)
         for (size_type row = 0; row < nr_rows; ++row) {
             for (size_type col = 0; col < nr_cols; ++col) {
                 (*this)(row, col) = other(row, col);
@@ -518,7 +518,7 @@ matrix<T, layout_>::matrix(const matrix<value_type, other_layout_> &other, const
         // convert AoS -> SoA or SoA -> AoS or manual copy because of mismatching padding sizes
         const size_type nr_rows = shape_.x;
         const size_type nr_cols = shape_.y;
-#pragma omp parallel for collapse(2)
+//#pragma omp parallel for collapse(2)
         for (size_type row = 0; row < nr_rows; ++row) {
             for (size_type col = 0; col < nr_cols; ++col) {
                 (*this)(row, col) = other(row, col);
@@ -560,7 +560,7 @@ matrix<T, layout_>::matrix(const std::vector<std::vector<value_type>> &data, con
             // explicitly iterate all elements otherwise
             const size_type nr_rows = shape_.x;
             const size_type nr_cols = shape_.y;
-#pragma omp parallel for collapse(2)
+//#pragma omp parallel for collapse(2)
             for (size_type row = 0; row < nr_rows; ++row) {
                 for (size_type col = 0; col < nr_cols; ++col) {
                     (*this)(row, col) = data[row][col];
@@ -676,7 +676,7 @@ auto matrix<T, layout_>::to_2D_vector() const -> std::vector<std::vector<value_t
         // explicitly iterate all elements otherwise
         const size_type nr_rows = shape_.x;
         const size_type nr_cols = shape_.y;
-#pragma omp parallel for collapse(2)
+//#pragma omp parallel for collapse(2)
         for (size_type row = 0; row < nr_rows; ++row) {
             for (size_type col = 0; col < nr_cols; ++col) {
                 ret[row][col] = (*this)(row, col);
@@ -699,7 +699,7 @@ auto matrix<T, layout_>::to_2D_vector_padded() const -> std::vector<std::vector<
         // explicitly iterate all elements otherwise
         const size_type nr_rows = shape_.x;
         const size_type nr_cols = shape_.y;
-#pragma omp parallel for collapse(2)
+//#pragma omp parallel for collapse(2)
         for (size_type row = 0; row < nr_rows; ++row) {
             for (size_type col = 0; col < nr_cols; ++col) {
                 ret[row][col] = (*this)(row, col);
@@ -793,7 +793,7 @@ matrix<T, layout> &operator*=(matrix<T, layout> &matr, const T scale) {
     const size_type num_rows = matr.num_rows();
     const size_type num_cols = matr.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(matr) firstprivate(scale, num_rows, num_cols)
+//#pragma omp parallel for collapse(2) default(none) shared(matr) firstprivate(scale, num_rows, num_cols)
     for (size_type row = 0; row < num_rows; ++row) {
         for (size_type col = 0; col < num_cols; ++col) {
             matr(row, col) *= scale;
@@ -839,7 +839,7 @@ matrix<T, layout> &operator+=(matrix<T, layout> &lhs, const matrix<T, layout> &r
     const size_type num_rows = lhs.num_rows();
     const size_type num_cols = lhs.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs) firstprivate(num_rows, num_cols)
+//#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs) firstprivate(num_rows, num_cols)
     for (size_type row = 0; row < num_rows; ++row) {
         for (size_type col = 0; col < num_cols; ++col) {
             lhs(row, col) += rhs(row, col);
@@ -877,7 +877,7 @@ matrix<T, layout> &operator-=(matrix<T, layout> &lhs, const matrix<T, layout> &r
     const size_type num_rows = lhs.num_rows();
     const size_type num_cols = lhs.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs) firstprivate(num_rows, num_cols)
+//#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs) firstprivate(num_rows, num_cols)
     for (size_type row = 0; row < num_rows; ++row) {
         for (size_type col = 0; col < num_cols; ++col) {
             lhs(row, col) -= rhs(row, col);
@@ -917,7 +917,7 @@ template <typename T, layout_type layout>
     const size_type res_num_cols = res.num_cols();
     const size_type lhs_num_cols = lhs.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs, res) firstprivate(res_num_rows, res_num_cols, lhs_num_cols)
+//#pragma omp parallel for collapse(2) default(none) shared(lhs, rhs, res) firstprivate(res_num_rows, res_num_cols, lhs_num_cols)
     for (size_type row = 0; row < res_num_rows; ++row) {
         for (size_type col = 0; col < res_num_cols; ++col) {
             T temp{ 0.0 };
@@ -971,7 +971,7 @@ template <typename T, layout_type layout>
     const size_type num_rows = matr.num_rows();
     const size_type num_cols = matr.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(matr, scale) firstprivate(num_rows, num_cols)
+//#pragma omp parallel for collapse(2) default(none) shared(matr, scale) firstprivate(num_rows, num_cols)
     for (size_type row = 0; row < num_rows; ++row) {
         for (size_type col = 0; col < num_cols; ++col) {
             matr(row, col) *= scale[row];

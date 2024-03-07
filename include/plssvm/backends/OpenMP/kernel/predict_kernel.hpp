@@ -41,7 +41,7 @@ inline void device_kernel_w_linear(soa_matrix<real_type> &w, const aos_matrix<re
     const std::size_t num_support_vectors = support_vectors.num_rows();
     const std::size_t num_features = support_vectors.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(w, support_vectors, alpha) firstprivate(num_classes, num_features, num_support_vectors)
+//#pragma omp parallel for collapse(2) default(none) shared(w, support_vectors, alpha) firstprivate(num_classes, num_features, num_support_vectors)
     for (std::size_t a = 0; a < num_classes; ++a) {
         for (std::size_t dim = 0; dim < num_features; ++dim) {
             real_type temp{ 0.0 };
@@ -72,7 +72,7 @@ inline void device_kernel_predict_linear(aos_matrix<real_type> &out, const soa_m
     const std::size_t num_predict_points = predict_points.num_rows();
     const std::size_t num_features = predict_points.num_cols();
 
-#pragma omp parallel for collapse(2) default(none) shared(out, w, rho, predict_points) firstprivate(num_classes, num_features, num_predict_points)
+//#pragma omp parallel for collapse(2) default(none) shared(out, w, rho, predict_points) firstprivate(num_classes, num_features, num_predict_points)
     for (std::size_t point_index = 0; point_index < num_predict_points; ++point_index) {
         for (std::size_t a = 0; a < num_classes; ++a) {
             real_type temp{ 0.0 };
