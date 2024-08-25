@@ -73,6 +73,7 @@ parser_train::parser_train(int argc, char **argv) {
            ("a,classification", "the classification strategy to use for multi-class classification: oaa|oao", cxxopts::value<decltype(classification)>()->default_value(fmt::format("{}", classification)))
            ("b,backend", fmt::format("choose the backend: {}", fmt::join(list_available_backends(), "|")), cxxopts::value<decltype(backend)>()->default_value(fmt::format("{}", backend)))
            ("p,target_platform", fmt::format("choose the target platform: {}", fmt::join(list_available_target_platforms(), "|")), cxxopts::value<decltype(target)>()->default_value(fmt::format("{}", target)))
+           ("preconditioner", "choose the preconditioner: none|jacobi", cxxopts::value<decltype(preconditioner)>()->default_value("none"))
 #if defined(PLSSVM_HAS_SYCL_BACKEND)
            ("sycl_kernel_invocation_type", "choose the kernel invocation type when using SYCL as backend: automatic|nd_range", cxxopts::value<decltype(sycl_kernel_invocation_type)>()->default_value(fmt::format("{}", sycl_kernel_invocation_type)))
            ("sycl_implementation_type", fmt::format("choose the SYCL implementation to be used in the SYCL backend: {}", fmt::join(sycl::list_available_sycl_implementations(), "|")), cxxopts::value<decltype(sycl_implementation_type)>()->default_value(fmt::format("{}", sycl_implementation_type)))
@@ -184,6 +185,9 @@ parser_train::parser_train(int argc, char **argv) {
     // parse the solver_type and cast the value to the respective enum
     solver = result["solver"].as<decltype(solver)>();
 
+    // parse the preconditioner_type and cast the value to the respective enum
+    preconditioner = result["preconditioner"].as<decltype(preconditioner)>();
+
 #if defined(PLSSVM_HAS_SYCL_BACKEND)
     // parse kernel invocation type when using SYCL as backend
     sycl_kernel_invocation_type = result["sycl_kernel_invocation_type"].as<decltype(sycl_kernel_invocation_type)>();
@@ -289,10 +293,12 @@ std::ostream &operator<<(std::ostream &out, const parser_train &params) {
     out << fmt::format(
         "backend: {}\n"
         "target platform: {}\n"
-        "solver: {}\n",
+        "solver: {}\n"
+        "preconditioner: {}\n",
         params.backend,
         params.target,
-        params.solver);
+        params.solver,
+        params.preconditioner);
 
     if (params.backend == backend_type::sycl || params.backend == backend_type::automatic) {
         out << fmt::format(

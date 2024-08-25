@@ -19,6 +19,7 @@
 #include "plssvm/classification_types.hpp"                   // plssvm::classification_type
 #include "plssvm/constants.hpp"                              // plssvm::real_type
 #include "plssvm/parameter.hpp"                              // plssvm::parameter
+#include "plssvm/preconditioner_types.hpp"                   // plssvm::preconditioner_type
 #include "plssvm/solver_types.hpp"                           // plssvm::solving_type
 #include "plssvm/target_platforms.hpp"                       // plssvm::target_platform
 
@@ -57,6 +58,8 @@ struct parser_train {
     backend_type backend{ backend_type::automatic };
     /// The target platform: automatic (depending on the used backend), CPUs or GPUs from NVIDIA, AMD, or Intel.
     target_platform target{ target_platform::automatic };
+    /// The used preconditioner type: none or jacobi
+    preconditioner_type preconditioner{ preconditioner_type::none };
     /// The used solver type for the LS-SVM kernel matrix: automatic (depending on the available (V)RAM), cg_explicit, or cg_implicit.
     solver_type solver{ solver_type::automatic };
 

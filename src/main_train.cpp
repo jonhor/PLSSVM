@@ -60,11 +60,13 @@ int main(int argc, char *argv[]) {
                     ? svm->fit(data,
                                plssvm::epsilon = cmd_parser.epsilon,
                                plssvm::classification = cmd_parser.classification,
+                               plssvm::preconditioner = cmd_parser.preconditioner,
                                plssvm::solver = cmd_parser.solver)
                     : svm->fit(data,
                                plssvm::epsilon = cmd_parser.epsilon,
                                plssvm::max_iter = cmd_parser.max_iter,
                                plssvm::classification = cmd_parser.classification,
+                               plssvm::preconditioner = cmd_parser.preconditioner,
                                plssvm::solver = cmd_parser.solver);
             // save model to file
             model.save(cmd_parser.model_filename);

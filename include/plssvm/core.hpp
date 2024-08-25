@@ -30,6 +30,7 @@
 #include "plssvm/matrix.hpp"                                 // a custom matrix class
 #include "plssvm/model.hpp"                                  // the model as a result of training a C-SVM
 #include "plssvm/parameter.hpp"                              // the C-SVM parameter
+#include "plssvm/preconditioner_types.hpp"                   // all supported preconditioner types
 #include "plssvm/shape.hpp"                                  // shape for a matrix or device pointer
 #include "plssvm/solver_types.hpp"                           // all supported solver types (e.g., Conjugate Gradients with explicit, streaming, or implicit kernel matrix generation)
 #include "plssvm/target_platforms.hpp"                       // all supported target platforms

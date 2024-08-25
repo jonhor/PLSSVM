@@ -32,6 +32,7 @@
 #include "plssvm/matrix.hpp"                      // plssvm::aos_matrix
 #include "plssvm/model.hpp"                       // plssvm::model
 #include "plssvm/parameter.hpp"                   // plssvm::parameter
+#include "plssvm/preconditioner_types.hpp"        // plssvm::preconditioner_type
 #include "plssvm/shape.hpp"                       // plssvm::shape
 #include "plssvm/solver_types.hpp"                // plssvm::solver_type
 #include "plssvm/target_platforms.hpp"            // plssvm::target_platform
@@ -362,7 +363,7 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
     // compile time check: each named parameter must only be passed once
     static_assert(!parser.has_duplicates(), "Can only use each named parameter once!");
     // compile time check: only some named parameters are allowed
-    static_assert(!parser.has_other_than(epsilon, max_iter, classification, solver), "An illegal named parameter has been passed!");
+    static_assert(!parser.has_other_than(epsilon, max_iter, classification, preconditioner, solver), "An illegal named parameter has been passed!");
 
     // compile time/runtime check: the values must have the correct types
     if constexpr (parser.has(classification)) {
@@ -720,13 +721,14 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     auto used_epsilon{ plssvm::real_type{ 0.001 } };
     unsigned long long used_max_iter{ A.num_rows() - 1 };  // account for later dimensional reduction
     solver_type used_solver{ solver_type::automatic };
+    preconditioner_type used_preconditioner{ preconditioner_type::none };
 
     // compile time check: only named parameters are permitted
     static_assert(!parser.has_unnamed_arguments(), "Can only use named parameter!");
     // compile time check: each named parameter must only be passed once
     static_assert(!parser.has_duplicates(), "Can only use each named parameter once!");
     // compile time check: only some named parameters are allowed
-    static_assert(!parser.has_other_than(epsilon, max_iter, classification, solver), "An illegal named parameter has been passed!");
+    static_assert(!parser.has_other_than(epsilon, max_iter, classification, preconditioner, solver), "An illegal named parameter has been passed!");
 
     // compile time/runtime check: the values must have the correct types
     if constexpr (parser.has(epsilon)) {
@@ -744,6 +746,10 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         if (used_max_iter == 0) {
             throw invalid_parameter_exception{ fmt::format("max_iter must be greater than 0, but is {}!", used_max_iter) };
         }
+    }
+    if constexpr (parser.has(preconditioner)) {
+        // get the value of the provided parameter
+        used_preconditioner = detail::get_value_from_named_parameter<preconditioner_type>(parser, preconditioner);
     }
     if constexpr (parser.has(solver)) {
         // get the value of the provided parameter

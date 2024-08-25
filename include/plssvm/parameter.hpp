@@ -47,6 +47,8 @@ IGOR_MAKE_NAMED_ARGUMENT(cost);
 IGOR_MAKE_NAMED_ARGUMENT(epsilon);
 /// Create a named argument for the maximum number of iterations `max_iter` performed in the CG algorithm.
 IGOR_MAKE_NAMED_ARGUMENT(max_iter);
+/// Create a named argument for the used preconditioner type.
+IGOR_MAKE_NAMED_ARGUMENT(preconditioner);
 /// Create a named argument for the used solver type.
 IGOR_MAKE_NAMED_ARGUMENT(solver);
 /// Create a named argument for the classification type used for fitting a model.
@@ -211,7 +213,7 @@ struct parameter {
             } else {
                 gamma = detail::get_value_from_named_parameter<real_type>(parser, plssvm::gamma);
             }
-            
+
             // runtime check: the value may only be used with a specific kernel type
             if (kernel_type == kernel_function_type::linear) {
                 print_warning("gamma", kernel_type);
