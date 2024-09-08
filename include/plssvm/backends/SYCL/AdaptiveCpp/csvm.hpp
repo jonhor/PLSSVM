@@ -169,6 +169,11 @@ class csvm : public ::plssvm::detail::gpu_csvm<detail::device_ptr, detail::queue
      * @copydoc plssvm::detail::gpu_csvm::run_assemble_kernel_matrix_explicit
      */
     [[nodiscard]] device_ptr_type run_assemble_kernel_matrix_explicit(std::size_t device_id, const ::plssvm::detail::execution_range &exec, const parameter &params, const device_ptr_type &data_d, const device_ptr_type &q_red_d, real_type QA_cost) const final;
+
+    /**
+     * @copydoc plssvm::detail::gpu_csvm::run_precondition_matrix
+     */
+    [[nodiscard]] device_ptr_type run_assemble_precondition_matrix(std::size_t device_id, preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const final;
     /**
      * @copydoc plssvm::detail::gpu_csvm::run_blas_level_3_kernel_explicit
      */

@@ -31,6 +31,7 @@
 #include "plssvm/gamma.hpp"                                                         // plssvm::gamma_type
 #include "plssvm/kernel_function_types.hpp"                                         // plssvm::kernel_type
 #include "plssvm/parameter.hpp"                                                     // plssvm::parameter, plssvm::detail::parameter
+#include "plssvm/preconditioner_types.hpp"                                          // plssvm::preconditioner_type
 #include "plssvm/shape.hpp"                                                         // plssvm::shape
 #include "plssvm/target_platforms.hpp"                                              // plssvm::target_platform
 #include "plssvm/verbosity_levels.hpp"                                              // plssvm::verbosity_level
@@ -41,6 +42,7 @@
 #include "fmt/core.h"     // fmt::format
 #include "fmt/ostream.h"  // can use fmt using operator<< overloads
 
+#include <cmath>      // std::sqrt
 #include <cstddef>    // std::size_t
 #include <cstdint>    // std::int32_t, std::uint16_t
 #include <exception>  // std::terminate
@@ -203,7 +205,6 @@ std::size_t csvm::get_max_work_group_size(const std::size_t device_id) const {
 //***************************************************//
 //                        fit                        //
 //***************************************************//
-
 auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const parameter &params, const device_ptr_type &data_d, const device_ptr_type &q_red_d, real_type QA_cost) const -> device_ptr_type {
     const std::size_t num_rows_reduced = data_d.shape().x - 1;
     const std::size_t num_features = data_d.shape().y;
@@ -272,6 +273,47 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
     detail::device_synchronize(device);
 
     return kernel_matrix_d;
+}
+
+auto csvm::run_assemble_precondition_matrix(const std::size_t device_id, const preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const -> device_ptr_type {
+    PLSSVM_ASSERT(!kernel_matrix_d.is_padded(), "Kernel matrix in triangular form shouldn't be padded");
+
+    const queue_type &device = devices_[device_id];
+    const std::size_t N = kernel_matrix_d.size();
+    const auto data = kernel_matrix_d.get();
+
+    device_ptr_type precondition_matrix_d{ N, device };  // only explicitly store the upper triangular matrix
+    const auto precondition_data = precondition_matrix_d.get();
+
+    // get order of "full" kernel matrix (shape = [order, order])
+    const auto order = static_cast<std::size_t>((std::sqrt(1 + (8 * N)) - 1) / 2.0);
+    const std::size_t num_diagonal_values = order - PADDING_SIZE;
+
+    // get indices of kernel matrix diagonal
+    std::vector<::sycl::id<1>> diagonal_indices_host(num_diagonal_values);
+    {
+        std::size_t current_index = 0;
+        for (std::size_t i = 0; i < num_diagonal_values; ++i) {
+            diagonal_indices_host[i] = ::sycl::id<1>(current_index);
+            current_index += order - i;
+        }
+    }
+    ::sycl::buffer<::sycl::id<1>, 1> diagonal_indices(diagonal_indices_host.data(), ::sycl::range<1>(num_diagonal_values));
+
+    // extract and scale the diagonal from the kernel matrix
+    device.impl->sycl_queue.submit([&](::sycl::handler &cgh) {
+        auto indices = diagonal_indices.get_access<::sycl::access_mode::read>(cgh);
+
+        cgh.parallel_for(::sycl::range<1>(num_diagonal_values), [=](::sycl::id<1> idx) {
+                auto diagonal_idx = indices[idx];
+                precondition_data[diagonal_idx] = 1.0 / data[diagonal_idx]; });
+    });
+    detail::device_synchronize(device);
+
+    auto buffer = std::vector<double>(N);
+    precondition_matrix_d.copy_to_host(buffer);
+
+    return precondition_matrix_d;
 }
 
 void csvm::run_blas_level_3_kernel_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const ::plssvm::detail::execution_range &mirror_exec, const real_type alpha, const device_ptr_type &A_d, const device_ptr_type &B_d, const real_type beta, device_ptr_type &C_d) const {

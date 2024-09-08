@@ -225,6 +225,14 @@ class csvm {
     [[nodiscard]] virtual std::vector<detail::move_only_any> assemble_kernel_matrix(solver_type solver, const parameter &params, const soa_matrix<real_type> &A, const std::vector<real_type> &q_red, real_type QA_cost) const = 0;
 
     /**
+     * @brief TODO
+     * @param preconditioner TODO
+     * @param K TODO
+     * @return TODO
+     */
+    [[nodiscard]] virtual std::vector<detail::move_only_any> assemble_precondition_matrix(preconditioner_type preconditioner, const std::vector<::plssvm::detail::move_only_any> &K) const = 0;
+
+    /**
      * @brief Perform a BLAS level 3 matrix-matrix multiplication: `C = alpha * A * B + beta * C`.
      * @param[in] solver the used solver type, determines the type of @p A
      * @param[in] alpha the value to scale the result of the matrix-matrix multiplication
@@ -928,6 +936,14 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
                     assembly_duration);
     }
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
+
+    // TODO guard with sycl?
+    // assemble precondition matrix
+    if (used_preconditioner == preconditioner_type::none) {
+        // TODO do something
+    } else {
+        auto M = this->assemble_precondition_matrix(used_preconditioner, kernel_matrix);
+    }
 
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
