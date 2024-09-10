@@ -287,12 +287,13 @@ class csvm {
      * @brief Solve the system of linear equations `AX = B` where `A` is the kernel matrix using the Conjugate Gradients (CG) algorithm.
      * @param[in] A the kernel matrix; potentially distributed across multiple devices
      * @param[in] B the right-hand sides
+     * @param[in] M an optional preconditioner for A; potentially distributed across multiple devices
      * @param[in] eps the termination criterion for the CG algorithm
      * @param[in] max_cg_iter the maximum number of CG iterations
      * @param[in] cg_solver the variation of the CG algorithm to use, i.e., how the kernel matrix is assembled (currently: explicit, streaming, implicit)
      * @return the result matrix `X` and the number of CG iterations necessary to solve the system of linear equations (`[[nodiscard]]`)
      */
-    [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
+    [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::vector<detail::move_only_any>> &M, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
     /**
      * @brief Perform a dimensional reduction for the kernel matrix.
      * @details Reduces the resulting dimension by `2` compared to the original LS-SVM formulation.
@@ -937,18 +938,24 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     }
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
 
-    // TODO guard with sycl?
-    // assemble precondition matrix
-    if (used_preconditioner == preconditioner_type::none) {
-        // TODO do something
-    } else {
-        auto M = this->assemble_precondition_matrix(used_preconditioner, kernel_matrix);
+    // assemble the precondition matrix (optional)
+    std::optional<std::vector<detail::move_only_any>> precondition_matrix = std::nullopt;
+    if (used_preconditioner != preconditioner_type::none) {
+        const std::chrono::steady_clock::time_point precondition_assembly_start_time = std::chrono::steady_clock::now();
+        precondition_matrix = this->assemble_precondition_matrix(used_preconditioner, kernel_matrix);
+        const std::chrono::steady_clock::time_point precondition_assembly_end_time = std::chrono::steady_clock::now();
+        const auto precondition_assembly_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precondition_assembly_end_time - precondition_assembly_start_time);
+
+        detail::log(verbosity_level::full | verbosity_level::timing,
+                    "Assembled the precondition matrix in {}.\n",
+                    precondition_assembly_duration);
+        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "precondition_matrix", "precondition_matrix_assembly", precondition_assembly_duration }));
     }
 
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
     unsigned long long num_iter{};
-    std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, used_epsilon, used_max_iter, used_solver);
+    std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, precondition_matrix, used_epsilon, used_max_iter, used_solver);
 
     // calculate bias and undo dimensional reduction
     aos_matrix<real_type> X_ret{ shape{ num_rhs, A.num_rows() }, shape{ PADDING_SIZE, PADDING_SIZE } };

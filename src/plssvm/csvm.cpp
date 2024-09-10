@@ -55,7 +55,7 @@ void csvm::sanity_check_parameter() const {
     // cost: all allowed
 }
 
-std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const real_type eps, const unsigned long long max_cg_iter, const solver_type cg_solver) const {
+std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::vector<detail::move_only_any>> &M, const real_type eps, const unsigned long long max_cg_iter, const solver_type cg_solver) const {
     using namespace plssvm::operators;
 
     PLSSVM_ASSERT(!B.empty(), "The right-hand sides must not be empty!");
@@ -79,11 +79,16 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
     soa_matrix<real_type> R{ B, shape{ PADDING_SIZE, PADDING_SIZE } };
     total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ -1.0 }, A, X, real_type{ 1.0 }, R);
 
-    // delta = R.T * R
-    std::vector<real_type> delta = rowwise_dot(R, R);
-    const std::vector<real_type> delta0(delta);
-
+    // if M: D = M * R
+    // else: D = R
     soa_matrix<real_type> D{ R, shape{ PADDING_SIZE, PADDING_SIZE } };
+    if (M.has_value()) {
+        total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, *M, R, real_type{ 0.0 }, D);
+    }
+
+    // delta = R.T * D
+    std::vector<real_type> delta = rowwise_dot(R, D);
+    const std::vector<real_type> delta0(delta);
 
     // get the index of the rhs that has the largest residual difference wrt to its target residual
     const auto rhs_idx_max_residual_difference = [&]() {
@@ -167,14 +172,29 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
             R -= rowwise_scale(alpha, Q);
         }
 
-        // delta = R^T * R
+        // delta_old = delta_new
         const std::vector<real_type> delta_old = delta;
-        delta = rowwise_dot(R, R);
+
+        // if M: delta_new = R.T * S, where S = M * R
+        // else: delta_new = R.T * R
+        soa_matrix<real_type> S{ D.shape(), D.padding() };
+        if (M.has_value()) {
+            total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, *M, R, real_type{ 0.0 }, S);
+            delta = rowwise_dot(R, S);
+        } else {
+            delta = rowwise_dot(R, R);
+        }
 
         // beta = delta_new / delta_old
         const std::vector<real_type> beta = delta / delta_old;
-        // D = beta * D + R
-        D = rowwise_scale(beta, D) + R;
+
+        // if M: D = beta * D + S
+        // else: D = beta * D + R
+        if (M.has_value()) {
+            D = rowwise_scale(beta, D) + S;
+        } else {
+            D = rowwise_scale(beta, D) + R;
+        }
 
         const std::chrono::steady_clock::time_point iteration_end_time = std::chrono::steady_clock::now();
         const std::chrono::duration iteration_duration = std::chrono::duration_cast<std::chrono::milliseconds>(iteration_end_time - iteration_start_time);
@@ -186,6 +206,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
         // next CG iteration
         ++iter;
     }
+
     const std::size_t max_residual_difference_idx = rhs_idx_max_residual_difference();
     detail::log(verbosity_level::full | verbosity_level::timing,
                 "Finished after {}/{} iterations with {}/{} converged rhs (max residual {} with target residual {} for rhs {}) and an average iteration time of {} and an average SYMM time of {}.\n",
