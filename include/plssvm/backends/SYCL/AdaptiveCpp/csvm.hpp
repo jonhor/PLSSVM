@@ -31,7 +31,7 @@
 
 #include <cstddef>      // std::size_t
 #include <type_traits>  // std::is_same_v, std::true_type
-#include <utility>      // std::forward
+#include <utility>      // std::forward, std::pair
 
 namespace plssvm {
 
@@ -173,7 +173,7 @@ class csvm : public ::plssvm::detail::gpu_csvm<detail::device_ptr, detail::queue
     /**
      * @copydoc plssvm::detail::gpu_csvm::run_precondition_matrix
      */
-    [[nodiscard]] device_ptr_type run_assemble_precondition_matrix(std::size_t device_id, preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const final;
+    [[nodiscard]] std::pair<device_ptr_type, preconditioner_func> run_construct_preconditioner(std::size_t device_id, preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const final;
     /**
      * @copydoc plssvm::detail::gpu_csvm::run_blas_level_3_kernel_explicit
      */

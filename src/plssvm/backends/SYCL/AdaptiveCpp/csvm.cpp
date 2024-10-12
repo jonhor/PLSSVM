@@ -13,6 +13,8 @@
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/device_ptr.hpp"                   // plssvm::adaptivecpp::detail::::device_ptr
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/queue_impl.hpp"                   // plssvm::adaptivecpp::detail::queue (PImpl implementation)
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/utility.hpp"                      // plssvm::adaptivecpp::detail::{get_device_list, device_synchronize, get_adaptivecpp_version_short, get_adaptivecpp_version}
+#include "plssvm/backends/SYCL/detail/matrix_view.hpp"                              // plssvm::sycl::detail::matrix_view
+#include "plssvm/backends/SYCL/detail/preconditioners.hpp"                          // plssvm::sycl::detail::precond::cholesky
 #include "plssvm/backends/SYCL/exceptions.hpp"                                      // plssvm::adaptivecpp::backend_exception
 #include "plssvm/backends/SYCL/implementation_types.hpp"                            // plssvm::sycl::implementation_type
 #include "plssvm/backends/SYCL/kernel/cg_explicit/blas.hpp"                         // plssvm::sycl::detail::{device_kernel_symm, device_kernel_symm_mirror, device_kernel_inplace_matrix_add, device_kernel_inplace_matrix_scale}
@@ -275,45 +277,61 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
     return kernel_matrix_d;
 }
 
-auto csvm::run_assemble_precondition_matrix(const std::size_t device_id, const preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const -> device_ptr_type {
+// void jacobi(const sycl::detail::triangular_matrix &A, const sycl::detail::triangular_matrix &M) {
+//     /*
+//     const std::size_t num_diagonal_values = order - PADDING_SIZE;
+//     // get indices of kernel matrix diagonal
+//     std::vector<::sycl::id<1>> diagonal_indices_host(num_diagonal_values);
+//     {
+//         std::size_t current_index = 0;
+//         for (std::size_t i = 0; i < num_diagonal_values; ++i) {
+//             diagonal_indices_host[i] = ::sycl::id<1>(current_index);
+//             current_index += order - i;
+//         }
+//     }
+//     ::sycl::buffer<::sycl::id<1>, 1> diagonal_indices(diagonal_indices_host.data(), ::sycl::range<1>(num_diagonal_values));
+//
+//     // extract and scale the diagonal from the kernel matrix
+//     device.impl->sycl_queue.submit([&](::sycl::handler &cgh) {
+//         const auto indices = diagonal_indices.get_access<::sycl::access_mode::read>(cgh);
+//
+//         cgh.parallel_for(::sycl::range<1>(num_diagonal_values), [=](const ::sycl::id<1> idx) {
+//             const auto diagonal_idx = indices[idx];
+//             precondition_data[diagonal_idx] = 1.0 / data[diagonal_idx]; });
+//     });
+//     detail::device_synchronize(device);
+//      */
+// }
+
+auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const -> std::pair<device_ptr_type, preconditioner_func> {
     PLSSVM_ASSERT(!kernel_matrix_d.is_padded(), "Kernel matrix in triangular form shouldn't be padded");
+    using namespace sycl::detail;
 
     const queue_type &device = devices_[device_id];
     const std::size_t N = kernel_matrix_d.size();
+    const auto order = static_cast<std::size_t>((std::sqrt(1 + (8 * N)) - 1) / 2.0);
     const auto data = kernel_matrix_d.get();
 
     device_ptr_type precondition_matrix_d{ N, device };  // only explicitly store the upper triangular matrix
-    const auto precondition_data = precondition_matrix_d.get();
 
-    // get order of "full" kernel matrix (shape = [order, order])
-    const auto order = static_cast<std::size_t>((std::sqrt(1 + (8 * N)) - 1) / 2.0);
-    const std::size_t num_diagonal_values = order - PADDING_SIZE;
+    auto K = matrix_view<matrix_type::upper>(data, order, order, PADDING_SIZE);
+    auto M = matrix_view<matrix_type::upper>(precondition_matrix_d.get(), order, order, PADDING_SIZE);
 
-    // get indices of kernel matrix diagonal
-    std::vector<::sycl::id<1>> diagonal_indices_host(num_diagonal_values);
-    {
-        std::size_t current_index = 0;
-        for (std::size_t i = 0; i < num_diagonal_values; ++i) {
-            diagonal_indices_host[i] = ::sycl::id<1>(current_index);
-            current_index += order - i;
-        }
+    auto &queue = device.impl->sycl_queue;
+
+    preconditioner_func func;
+    switch (preconditioner) {
+        case preconditioner_type::jacobi:
+            // jacobi(K, M);
+            break;
+        case preconditioner_type::cholesky:
+            func = precond::cholesky(K, M, queue);
+            break;
+        case preconditioner_type::none:
+            break;
     }
-    ::sycl::buffer<::sycl::id<1>, 1> diagonal_indices(diagonal_indices_host.data(), ::sycl::range<1>(num_diagonal_values));
 
-    // extract and scale the diagonal from the kernel matrix
-    device.impl->sycl_queue.submit([&](::sycl::handler &cgh) {
-        auto indices = diagonal_indices.get_access<::sycl::access_mode::read>(cgh);
-
-        cgh.parallel_for(::sycl::range<1>(num_diagonal_values), [=](::sycl::id<1> idx) {
-                auto diagonal_idx = indices[idx];
-                precondition_data[diagonal_idx] = 1.0 / data[diagonal_idx]; });
-    });
-    detail::device_synchronize(device);
-
-    auto buffer = std::vector<double>(N);
-    precondition_matrix_d.copy_to_host(buffer);
-
-    return precondition_matrix_d;
+    return std::pair(std::move(precondition_matrix_d), std::move(func));
 }
 
 void csvm::run_blas_level_3_kernel_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const ::plssvm::detail::execution_range &mirror_exec, const real_type alpha, const device_ptr_type &A_d, const device_ptr_type &B_d, const real_type beta, device_ptr_type &C_d) const {

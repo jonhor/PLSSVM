@@ -23,6 +23,8 @@ std::ostream &operator<<(std::ostream &out, const preconditioner_type preconditi
             return out << "none";
         case preconditioner_type::jacobi:
             return out << "jacobi";
+        case preconditioner_type::cholesky:
+            return out << "cholesky";
     }
     return out << "unknown";
 }
@@ -36,6 +38,8 @@ std::istream &operator>>(std::istream &in, preconditioner_type &preconditioning)
         preconditioning = preconditioner_type::none;
     } else if (str == "jacobi") {
         preconditioning = preconditioner_type::jacobi;
+    } else if (str == "cholesky") {
+        preconditioning = preconditioner_type::cholesky;
     } else {
         in.setstate(std::ios::failbit);
     }

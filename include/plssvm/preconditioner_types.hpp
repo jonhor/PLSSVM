@@ -14,12 +14,26 @@
 #define PLSSVM_PRECONDITIONER_TYPES_HPP_
 #pragma once
 
+#include "plssvm/constants.hpp"
+#include "plssvm/detail/move_only_any.hpp"
+#include "plssvm/matrix.hpp"
+
 #include "fmt/core.h"     // fmt::formatter
 #include "fmt/ostream.h"  // fmt::ostream_formatter
 
 #include <iosfwd>  // forward declare std::ostream and std::istream
 
 namespace plssvm {
+
+/*
+ * Function that applies the preconditioner by solving S = M * R
+ */
+using preconditioner_func = std::function<void(const soa_matrix<real_type> &R, soa_matrix<real_type> &S)>;
+
+/*
+ * Pair consisting of the computed preconditioner matrix and the preconditioner function
+ */
+using preconditioner_components = std::pair<std::vector<detail::move_only_any>, preconditioner_func>;
 
 /**
  * @brief Enum class for all possible preconditioner types.
@@ -30,8 +44,10 @@ enum class preconditioner_type {
      * @details No preconditioner is used by default.
      */
     none,
-    /** Use the jacobi (diagonal) preconditioner. */
-    jacobi
+    /* Use the jacobi (diagonal) preconditioner. */
+    jacobi,
+    /* Use complete cholesky decomposition as the preconditioner */
+    cholesky,
 };
 
 /**
