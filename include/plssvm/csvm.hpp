@@ -938,12 +938,16 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     }
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
 
-    // assemble the precondition matrix (optional)
+    // construct preconditioner (optional)
     std::optional<preconditioner_func> M = std::nullopt;
+    std::optional<std::vector<detail::move_only_any>> P = std::nullopt;
     if (used_preconditioner != preconditioner_type::none) {
         const std::chrono::steady_clock::time_point precondition_assembly_start_time = std::chrono::steady_clock::now();
+
         auto preconditioner_components = this->construct_preconditioner(used_preconditioner, kernel_matrix);
         M = std::move(preconditioner_components.second);
+        P = std::move(preconditioner_components.first);
+
         const std::chrono::steady_clock::time_point precondition_assembly_end_time = std::chrono::steady_clock::now();
         const auto precondition_assembly_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precondition_assembly_end_time - precondition_assembly_start_time);
 

@@ -13,6 +13,18 @@ using namespace plssvm::sycl::detail;
  * *******************************
  */
 TEST(MatrixView, General_BasicIndexing) {
+    std::vector<real_type> elems{ 1, 2, 3, 4, 5, 6 };
+    matrix_view<matrix_type::general> A(elems.data(), 3, 2);
+
+    EXPECT_EQ(A(0, 0), 1);
+    EXPECT_EQ(A(0, 1), 2);
+    EXPECT_EQ(A(1, 0), 3);
+    EXPECT_EQ(A(1, 1), 4);
+    EXPECT_EQ(A(2, 0), 5);
+    EXPECT_EQ(A(2, 1), 6);
+}
+
+TEST(MatrixView, General_BasicIndexingSymmetric) {
     std::vector<real_type> elems{ 1, 2, 3, 4 };
     matrix_view<matrix_type::general> A(elems.data(), 2, 2);
 
@@ -41,7 +53,7 @@ TEST(MatrixView, General_PaddedIndexing) {
  */
 TEST(MatrixView, Upper_BasicIndexing) {
     std::vector<real_type> elems{ 1, 2, 3, 4, 5, 6 };
-    matrix_view<matrix_type::upper> A(elems.data(), 3);
+    matrix_view<matrix_type::upper> A(elems.data(), 3, 3);
 
     EXPECT_EQ(A(0, 0), 1);
     EXPECT_EQ(A(0, 1), 2);
@@ -70,7 +82,7 @@ TEST(MatrixView, Upper_PaddedIndexing) {
  */
 TEST(MatrixView, Lower_BasicIndexing) {
     std::vector<real_type> elems = { 1, 2, 3, 4, 5, 6 };
-    matrix_view<matrix_type::lower> A(elems.data(), 3);
+    matrix_view<matrix_type::lower> A(elems.data(), 3, 3);
 
     EXPECT_EQ(A(0, 0), 1);
     EXPECT_EQ(A(1, 0), 2);
@@ -97,11 +109,11 @@ TEST(MatrixView, Lower_PaddedIndexing) {
  * * Shared Functionality
  * *******************************
  */
-TEST(HelperFunctions, CreateSharedView) {
+TEST(UtilityFunctions, CreateManagedView) {
     ::sycl::default_selector selector;
     ::sycl::queue queue{ selector };
 
-    auto A = helper::create_shared_view<matrix_type::lower>({ 5, 3, 9, 7, 4, 2 }, 3, 3, queue);
+    auto A = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
 
     EXPECT_EQ(A(0, 0), 5);
     EXPECT_EQ(A(1, 0), 3);
@@ -109,16 +121,27 @@ TEST(HelperFunctions, CreateSharedView) {
     EXPECT_EQ(A(2, 0), 7);
     EXPECT_EQ(A(2, 1), 4);
     EXPECT_EQ(A(2, 2), 2);
-
-    ::sycl::free(A.data(), queue);
 }
 
-TEST(HelperFunctions, Transpose_FromLower) {
+TEST(UtilityFunctions, Zeros) {
     ::sycl::default_selector selector;
     ::sycl::queue queue{ selector };
 
-    auto A = helper::create_shared_view<matrix_type::lower>({ 5, 3, 9, 7, 4, 2 }, 3, 3, queue);
-    auto AT = helper::transpose(A, queue);
+    auto A = utility::zeros<matrix_type::general>(queue, shape(4, 3));
+
+    for (auto i = 0; i < 4; ++i) {
+        for (auto j = 0; j < 3; ++j) {
+            EXPECT_EQ(A(i, j), 0);
+        }
+    }
+}
+
+TEST(UtilityFunctions, Transpose_FromLower) {
+    ::sycl::default_selector selector;
+    ::sycl::queue queue{ selector };
+
+    auto A = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+    auto AT = utility::transpose(queue, A);
 
     EXPECT_EQ(AT(0, 0), 5);
     EXPECT_EQ(AT(0, 1), 3);
@@ -126,17 +149,14 @@ TEST(HelperFunctions, Transpose_FromLower) {
     EXPECT_EQ(AT(1, 1), 9);
     EXPECT_EQ(AT(1, 2), 4);
     EXPECT_EQ(AT(2, 2), 2);
-
-    ::sycl::free(A.data(), queue);
-    ::sycl::free(AT.data(), queue);
 }
 
-TEST(HelperFunctions, Transpose_FromUpper) {
+TEST(UtilityFunctions, Transpose_FromUpper) {
     ::sycl::default_selector selector;
     ::sycl::queue queue{ selector };
 
-    auto A = helper::create_shared_view<matrix_type::upper>({ 5, 3, 9, 7, 4, 2 }, 3, 3, queue);
-    auto AT = helper::transpose(A, queue);
+    auto A = utility::create_managed_view<matrix_type::upper>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+    auto AT = utility::transpose(queue, A);
 
     EXPECT_EQ(AT(0, 0), 5);
     EXPECT_EQ(AT(1, 0), 3);
@@ -144,7 +164,4 @@ TEST(HelperFunctions, Transpose_FromUpper) {
     EXPECT_EQ(AT(2, 0), 9);
     EXPECT_EQ(AT(2, 1), 4);
     EXPECT_EQ(AT(2, 2), 2);
-
-    ::sycl::free(A.data(), queue);
-    ::sycl::free(AT.data(), queue);
 }
