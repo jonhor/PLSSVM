@@ -13,8 +13,6 @@
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/device_ptr.hpp"                   // plssvm::adaptivecpp::detail::::device_ptr
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/queue_impl.hpp"                   // plssvm::adaptivecpp::detail::queue (PImpl implementation)
 #include "plssvm/backends/SYCL/AdaptiveCpp/detail/utility.hpp"                      // plssvm::adaptivecpp::detail::{get_device_list, device_synchronize, get_adaptivecpp_version_short, get_adaptivecpp_version}
-#include "plssvm/backends/SYCL/detail/matrix_view.hpp"                              // plssvm::sycl::detail::matrix_view
-#include "plssvm/backends/SYCL/detail/preconditioners.hpp"                          // plssvm::sycl::detail::precond::cholesky
 #include "plssvm/backends/SYCL/exceptions.hpp"                                      // plssvm::adaptivecpp::backend_exception
 #include "plssvm/backends/SYCL/implementation_types.hpp"                            // plssvm::sycl::implementation_type
 #include "plssvm/backends/SYCL/kernel/cg_explicit/blas.hpp"                         // plssvm::sycl::detail::{device_kernel_symm, device_kernel_symm_mirror, device_kernel_inplace_matrix_add, device_kernel_inplace_matrix_scale}
@@ -22,6 +20,8 @@
 #include "plssvm/backends/SYCL/kernel/cg_implicit/kernel_matrix_assembly_blas.hpp"  // plssvm::sycl::detail::device_kernel_assembly_symm
 #include "plssvm/backends/SYCL/kernel/predict_kernel.hpp"                           // plssvm::sycl::detail::{device_kernel_w_linear, device_kernel_predict_linear, device_kernel_predict}
 #include "plssvm/backends/SYCL/kernel_invocation_types.hpp"                         // plssvm::kernel_invocation_type
+#include "plssvm/backends/SYCL/linalg/linalg.hpp"                                   // plssvm::sycl::linalg::matrix
+#include "plssvm/backends/SYCL/preconditioning/preconditioners.hpp"                 // plssvm::sycl::preconditioning::{dummy, cholesky, jacobi, rpcholesky}
 #include "plssvm/constants.hpp"                                                     // plssvm::{real_type, THREAD_BLOCK_SIZE, INTERNAL_BLOCK_SIZE, PADDING_SIZE}
 #include "plssvm/detail/assert.hpp"                                                 // PLSSVM_ASSERT
 #include "plssvm/detail/data_distribution.hpp"                                      // plssvm::detail::{data_distribution, triangular_data_distribution, rectangular_data_distribution}
@@ -277,9 +277,11 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
     return kernel_matrix_d;
 }
 
-auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const -> std::pair<device_ptr_type, preconditioner_func> {
+auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d) const -> std::unique_ptr<preconditioner> {
+    using namespace plssvm::sycl;
+
     PLSSVM_ASSERT(!kernel_matrix_d.is_padded(), "Kernel matrix in triangular form shouldn't be padded");
-    using namespace sycl::detail;
+    using namespace sycl::linalg;
 
     const queue_type &device = devices_[device_id];
     const std::size_t N = kernel_matrix_d.size();
@@ -290,26 +292,35 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
     order -= PADDING_SIZE;
     const auto data = kernel_matrix_d.get();
 
-    device_ptr_type precondition_matrix_d{ kernel_matrix_d.shape(), kernel_matrix_d.padding(), device };  // only explicitly store the upper triangular matrix
-
-    auto K = matrix_view<matrix_type::upper>(data, order, order, PADDING_SIZE);
-    auto M = matrix_view<matrix_type::upper>(precondition_matrix_d.get(), order, order, PADDING_SIZE);
-
+    auto K = matrix_view<matrix_type::symmetric>(data, order, order, PADDING_SIZE);
     auto &queue = device.impl->sycl_queue;
-
-    preconditioner_func func;
-    switch (preconditioner) {
+    switch (preconditioner_type) {
         case preconditioner_type::jacobi:
-            func = precond::jacobi(queue, K, M);
-            break;
+            {
+                auto construct_jacobi_preconditioner = preconditioning::jacobi_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::jacobi_preconditioner>(construct_jacobi_preconditioner());
+            }
         case preconditioner_type::cholesky:
-            func = precond::cholesky(queue, K, M);
-            break;
+            {
+                auto construct_cholesky_preconditioner = preconditioning::cholesky_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::cholesky_preconditioner>(construct_cholesky_preconditioner());
+            }
+        case preconditioner_type::rpcholesky:
+            {
+                // TODO pass cost_factor here instead of 1
+                auto construct_rpcholesky_preconditioner = preconditioning::rpcholesky_preconditioner_constructor{ queue, K, real_type{ 1 } };
+                return std::make_unique<preconditioning::rpcholesky_preconditioner>(construct_rpcholesky_preconditioner());
+            }
+        case preconditioner_type::dummy:
+            {
+                auto construct_dummy_preconditioner = preconditioning::dummy_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::dummy_preconditioner>(construct_dummy_preconditioner());
+            }
         case preconditioner_type::none:
-            break;
+            {
+                plssvm::detail::unreachable();
+            }
     }
-
-    return std::pair(std::move(precondition_matrix_d), std::move(func));
 }
 
 void csvm::run_blas_level_3_kernel_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const ::plssvm::detail::execution_range &mirror_exec, const real_type alpha, const device_ptr_type &A_d, const device_ptr_type &B_d, const real_type beta, device_ptr_type &C_d) const {

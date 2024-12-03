@@ -25,15 +25,15 @@
 
 namespace plssvm {
 
-/*
- * Function that applies the preconditioner by solving S = M * R
- */
-using preconditioner_func = std::function<void(const soa_matrix<real_type> &R, soa_matrix<real_type> &S)>;
-
-/*
- * Pair consisting of the computed preconditioner matrix and the preconditioner function
- */
-using preconditioner_components = std::pair<std::vector<detail::move_only_any>, preconditioner_func>;
+///*
+// * Function that applies the preconditioner by solving S = M * R
+// */
+// using preconditioner_func = std::function<void(const soa_matrix<real_type> &R, soa_matrix<real_type> &S)>;
+//
+///*
+// * Pair consisting of the computed preconditioner matrix and the preconditioner function
+// */
+// using preconditioner_components = std::pair<std::vector<detail::move_only_any>, preconditioner_func>;
 
 /**
  * @brief Enum class for all possible preconditioner types.
@@ -44,10 +44,13 @@ enum class preconditioner_type {
      * @details No preconditioner is used by default.
      */
     none,
+    dummy,
     /* Use the jacobi (diagonal) preconditioner. */
     jacobi,
     /* Use complete cholesky decomposition as the preconditioner */
     cholesky,
+    /* Use randomly pivoted cholesky (RPCholesky) as the preconditioner */
+    rpcholesky,
 };
 
 /**
@@ -56,7 +59,8 @@ enum class preconditioner_type {
  * @param[in] preconditioning the preconditioner type
  * @return the output-stream
  */
-std::ostream &operator<<(std::ostream &out, preconditioner_type preconditioning);
+std::ostream &
+operator<<(std::ostream &out, preconditioner_type preconditioning);
 
 /**
  * @brief Use the input-stream @p in to initialize the @p preconditioner type.

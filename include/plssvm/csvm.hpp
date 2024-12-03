@@ -32,6 +32,7 @@
 #include "plssvm/matrix.hpp"                      // plssvm::aos_matrix
 #include "plssvm/model.hpp"                       // plssvm::model
 #include "plssvm/parameter.hpp"                   // plssvm::parameter
+#include "plssvm/preconditioner.hpp"              // plssvm::preconditioner
 #include "plssvm/preconditioner_types.hpp"        // plssvm::preconditioner_type
 #include "plssvm/shape.hpp"                       // plssvm::shape
 #include "plssvm/solver_types.hpp"                // plssvm::solver_type
@@ -226,11 +227,11 @@ class csvm {
 
     /**
      * @brief TODO
-     * @param preconditioner TODO
+     * @param preconditioner_type TODO
      * @param K TODO
      * @return TODO
      */
-    [[nodiscard]] virtual preconditioner_components construct_preconditioner(preconditioner_type preconditioner, const std::vector<::plssvm::detail::move_only_any> &K) const = 0;
+    [[nodiscard]] virtual std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K) const = 0;
 
     /**
      * @brief Perform a BLAS level 3 matrix-matrix multiplication: `C = alpha * A * B + beta * C`.
@@ -287,13 +288,13 @@ class csvm {
      * @brief Solve the system of linear equations `AX = B` where `A` is the kernel matrix using the Conjugate Gradients (CG) algorithm.
      * @param[in] A the kernel matrix; potentially distributed across multiple devices
      * @param[in] B the right-hand sides
-     * @param[in] M an optional preconditioner for A; potentially distributed across multiple devices
+     * @param[in] P an optional preconditioner for A
      * @param[in] eps the termination criterion for the CG algorithm
      * @param[in] max_cg_iter the maximum number of CG iterations
      * @param[in] cg_solver the variation of the CG algorithm to use, i.e., how the kernel matrix is assembled (currently: explicit, streaming, implicit)
      * @return the result matrix `X` and the number of CG iterations necessary to solve the system of linear equations (`[[nodiscard]]`)
      */
-    [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<preconditioner_func> &M, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
+    [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::unique_ptr<preconditioner>> &P, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
     /**
      * @brief Perform a dimensional reduction for the kernel matrix.
      * @details Reduces the resulting dimension by `2` compared to the original LS-SVM formulation.
@@ -372,7 +373,7 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
     // compile time check: each named parameter must only be passed once
     static_assert(!parser.has_duplicates(), "Can only use each named parameter once!");
     // compile time check: only some named parameters are allowed
-    static_assert(!parser.has_other_than(epsilon, max_iter, classification, preconditioner, solver), "An illegal named parameter has been passed!");
+    static_assert(!parser.has_other_than(epsilon, max_iter, classification, selected_preconditioner, solver), "An illegal named parameter has been passed!");
 
     // compile time/runtime check: the values must have the correct types
     if constexpr (parser.has(classification)) {
@@ -737,7 +738,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     // compile time check: each named parameter must only be passed once
     static_assert(!parser.has_duplicates(), "Can only use each named parameter once!");
     // compile time check: only some named parameters are allowed
-    static_assert(!parser.has_other_than(epsilon, max_iter, classification, preconditioner, solver), "An illegal named parameter has been passed!");
+    static_assert(!parser.has_other_than(epsilon, max_iter, classification, selected_preconditioner, solver), "An illegal named parameter has been passed!");
 
     // compile time/runtime check: the values must have the correct types
     if constexpr (parser.has(epsilon)) {
@@ -756,9 +757,9 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
             throw invalid_parameter_exception{ fmt::format("max_iter must be greater than 0, but is {}!", used_max_iter) };
         }
     }
-    if constexpr (parser.has(preconditioner)) {
+    if constexpr (parser.has(selected_preconditioner)) {
         // get the value of the provided parameter
-        used_preconditioner = detail::get_value_from_named_parameter<preconditioner_type>(parser, preconditioner);
+        used_preconditioner = detail::get_value_from_named_parameter<preconditioner_type>(parser, selected_preconditioner);
     }
     if constexpr (parser.has(solver)) {
         // get the value of the provided parameter
@@ -938,15 +939,14 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     }
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
 
+    // auto j = *(kernel_matrix[0]);
+
     // construct preconditioner (optional)
-    std::optional<preconditioner_func> M = std::nullopt;
-    std::optional<std::vector<detail::move_only_any>> P = std::nullopt;
+    std::optional<std::unique_ptr<preconditioner>> P = std::nullopt;
     if (used_preconditioner != preconditioner_type::none) {
         const std::chrono::steady_clock::time_point precondition_assembly_start_time = std::chrono::steady_clock::now();
 
-        auto preconditioner_components = this->construct_preconditioner(used_preconditioner, kernel_matrix);
-        M = std::move(preconditioner_components.second);
-        P = std::move(preconditioner_components.first);
+        P = this->construct_preconditioner(used_preconditioner, kernel_matrix);
 
         const std::chrono::steady_clock::time_point precondition_assembly_end_time = std::chrono::steady_clock::now();
         const auto precondition_assembly_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precondition_assembly_end_time - precondition_assembly_start_time);
@@ -960,7 +960,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
     unsigned long long num_iter{};
-    std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, M, used_epsilon, used_max_iter, used_solver);
+    std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, P, used_epsilon, used_max_iter, used_solver);
 
     // calculate bias and undo dimensional reduction
     aos_matrix<real_type> X_ret{ shape{ num_rhs, A.num_rows() }, shape{ PADDING_SIZE, PADDING_SIZE } };

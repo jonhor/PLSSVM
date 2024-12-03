@@ -55,7 +55,7 @@ void csvm::sanity_check_parameter() const {
     // cost: all allowed
 }
 
-std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<preconditioner_func> &M, const real_type eps, const unsigned long long max_cg_iter, const solver_type cg_solver) const {
+std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::unique_ptr<preconditioner>> &P, const real_type eps, const unsigned long long max_cg_iter, const solver_type cg_solver) const {
     using namespace plssvm::operators;
 
     PLSSVM_ASSERT(!B.empty(), "The right-hand sides must not be empty!");
@@ -72,19 +72,18 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
     //
     // perform Conjugate Gradients (CG) algorithm
     //
-
     soa_matrix<real_type> X{ shape{ num_rhs, num_rows }, real_type{ 1.0 }, shape{ PADDING_SIZE, PADDING_SIZE } };
 
     // R = B - A * X
     soa_matrix<real_type> R{ B, shape{ PADDING_SIZE, PADDING_SIZE } };
     total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ -1.0 }, A, X, real_type{ 1.0 }, R);
 
-    // if M: D = M * R
+    // if P: D = M * R
     // else: D = R
     soa_matrix<real_type> D{ R, shape{ PADDING_SIZE, PADDING_SIZE } };
-    if (M.has_value()) {
-        // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, *M, R, real_type{ 0.0 }, D);
-        (*M)(R, D);
+    if (P.has_value()) {
+        // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, R, real_type{ 0.0 }, D);
+        (*P)->apply(R, D);
     }
 
     // delta = R.T * D
@@ -176,11 +175,11 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
         // delta_old = delta_new
         const std::vector<real_type> delta_old = delta;
 
-        // if M: delta_new = R.T * S, where S = M * R
+        // if P: delta_new = R.T * S, where S = M * R
         // else: delta_new = R.T * R
         soa_matrix<real_type> S{ D.shape(), D.padding() };
-        if (M.has_value()) {
-            (*M)(R, S);
+        if (P.has_value()) {
+            (*P)->apply(R, S);
             // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, *M, R, real_type{ 0.0 }, S);
             delta = rowwise_dot(R, S);
         } else {
@@ -192,7 +191,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
 
         // if M: D = beta * D + S
         // else: D = beta * D + R
-        if (M.has_value()) {
+        if (P.has_value()) {
             D = rowwise_scale(beta, D) + S;
         } else {
             D = rowwise_scale(beta, D) + R;

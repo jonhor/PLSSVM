@@ -1,9 +1,10 @@
-
 #ifndef PLSSVM_BACKENDS_SYCL_DETAIL_RANDOM_HPP_
 #define PLSSVM_BACKENDS_SYCL_DETAIL_RANDOM_HPP_
 #pragma once
 
-#include <random>  // std::random_device, std::default_random_engine
+#include "plssvm/constants.hpp"
+
+#include <random>  // std::random_device, std::default_random_engine, std::uniform_real_distribution, std::discrete_distribution
 
 namespace plssvm::sycl::detail {
 
@@ -19,10 +20,22 @@ class rng {
         return real_distribution_(random_engine_);
     }
 
+    template <class IntType = int>
+    IntType randint(IntType begin, IntType end) {
+        std::uniform_int_distribution distribution(begin, end);
+        return distribution(random_engine_);
+    }
+
+    template <class IntType = int, class InputIt>
+    IntType choice(InputIt begin, InputIt end) {
+        std::discrete_distribution<IntType> distribution(begin, end);
+        return distribution(random_engine_);
+    }
+
   private:
-    std::uniform_real_distribution<real_type> real_distribution_;
     std::random_device random_device_;
     std::default_random_engine random_engine_;
+    std::uniform_real_distribution<real_type> real_distribution_;
 };
 
 }  // namespace plssvm::sycl::detail

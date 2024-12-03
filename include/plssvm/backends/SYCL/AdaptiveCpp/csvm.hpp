@@ -173,7 +173,7 @@ class csvm : public ::plssvm::detail::gpu_csvm<detail::device_ptr, detail::queue
     /**
      * @copydoc plssvm::detail::gpu_csvm::run_precondition_matrix
      */
-    [[nodiscard]] std::pair<device_ptr_type, preconditioner_func> run_construct_preconditioner(std::size_t device_id, preconditioner_type preconditioner, const device_ptr_type &kernel_matrix_d) const final;
+    [[nodiscard]] std::unique_ptr<preconditioner> run_construct_preconditioner(std::size_t device_id, preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d) const final;
     /**
      * @copydoc plssvm::detail::gpu_csvm::run_blas_level_3_kernel_explicit
      */

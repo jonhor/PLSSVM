@@ -21,10 +21,14 @@ std::ostream &operator<<(std::ostream &out, const preconditioner_type preconditi
     switch (preconditioning) {
         case preconditioner_type::none:
             return out << "none";
+        case preconditioner_type::dummy:
+            return out << "dummy";
         case preconditioner_type::jacobi:
             return out << "jacobi";
         case preconditioner_type::cholesky:
             return out << "cholesky";
+        case preconditioner_type::rpcholesky:
+            return out << "rpcholesky";
     }
     return out << "unknown";
 }
@@ -36,10 +40,14 @@ std::istream &operator>>(std::istream &in, preconditioner_type &preconditioning)
 
     if (str == "none") {
         preconditioning = preconditioner_type::none;
+    } else if (str == "dummy") {
+        preconditioning = preconditioner_type::dummy;
     } else if (str == "jacobi") {
         preconditioning = preconditioner_type::jacobi;
     } else if (str == "cholesky") {
         preconditioning = preconditioner_type::cholesky;
+    } else if (str == "rpcholesky") {
+        preconditioning = preconditioner_type::rpcholesky;
     } else {
         in.setstate(std::ios::failbit);
     }
