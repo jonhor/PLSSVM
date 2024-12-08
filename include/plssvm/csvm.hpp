@@ -956,6 +956,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
                     precondition_assembly_duration);
         PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "precondition_matrix", "precondition_matrix_assembly", precondition_assembly_duration }));
     }
+    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "parameter", "preconditioner", used_preconditioner }));
 
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
