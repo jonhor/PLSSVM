@@ -4,6 +4,7 @@
 
 #include "plssvm/backends/SYCL/linalg/linalg.hpp"
 #include "plssvm/backends/SYCL/preconditioning/sycl_preconditioner.hpp"
+#include "plssvm/detail/logging.hpp"
 
 #include "sycl/sycl.hpp"
 
@@ -41,7 +42,15 @@ class cholesky_preconditioner_constructor {
         K_(K) { }
 
     cholesky_preconditioner operator()() {
-        auto U = linalg::cholesky(queue_, K_);
+        auto cholesky = linalg::cholesky_decomposition{ queue_, K_ };
+        auto U = cholesky();
+
+        plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
+                            "Cholesky decomposition timings:\ntotal factorization time {}.\ntotal solve time: {}.\ntotal_update_time: {}.",
+                            cholesky.total_factorization_time(),
+                            cholesky.total_solve_time(),
+                            cholesky.total_update_time());
+
         return cholesky_preconditioner{ queue_, std::move(U) };
     }
 
