@@ -18,7 +18,7 @@ class dummy_preconditioner : public sycl_preconditioner {
     }
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) override {
-        linalg::matrix_multiplication(queue_, M_, B, C);
+        linalg::matrix_multiplication<matrix_type::general>(queue_, M_, B, C);
     }
 
     matrix<matrix_type::general> M_;
