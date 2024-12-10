@@ -19,9 +19,10 @@ class cholesky_preconditioner : public sycl_preconditioner {
         MT_(linalg::transposed(queue, M_)) { }
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) override {
-        // TODO have a inplace variant for triangular solves
-        linalg::triangular_solve_lower(queue_, MT_.view(), B, B);
-        linalg::triangular_solve_upper(queue_, M_.view(), B, C);
+        linalg::triangular_solve_lower_gpu(queue_, MT_.view(), B);
+        linalg::triangular_solve_upper_gpu(queue_, M_.view(), B);
+        queue_.memcpy(C.data(), B.data(), C.size_bytes_padded()).wait();
+        // linalg::triangular_solve_upper(queue_, M_.view(), B, C);
     }
 
     matrix<matrix_type::upper> M_;
@@ -46,7 +47,7 @@ class cholesky_preconditioner_constructor {
         auto U = cholesky();
 
         plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
-                            "Cholesky decomposition timings:\ntotal factorization time {}.\ntotal solve time: {}.\ntotal_update_time: {}.",
+                            "Cholesky decomposition timings:\ntotal factorization time {}.\ntotal solve time: {}.\ntotal_update_time: {}.\n",
                             cholesky.total_factorization_time(),
                             cholesky.total_solve_time(),
                             cholesky.total_update_time());
