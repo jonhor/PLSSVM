@@ -10,7 +10,8 @@ namespace plssvm::sycl::linalg {
  * Matrix Multiplication
  * C = A @ B
  */
-inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix_type::general> &A, const matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) {
+template <matrix_type T, typename = typename std::enable_if<T == matrix_type::general || T == matrix_type::symmetric>::type>
+inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<T> &A, const matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) {
     PLSSVM_ASSERT(A.n_cols == B.n_rows, "A should have the same number of columns as B has rows");
     PLSSVM_ASSERT(A.n_rows == C.n_rows, "C should have the same number of rows as A");
     PLSSVM_ASSERT(B.n_cols == C.n_cols, "C should have the same number of columns as B");
@@ -18,6 +19,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
 
     const auto N = A.n_rows;
     const auto M = B.n_cols;
+    const auto K = A.n_cols;
 
     ::sycl::range<2> global_range(N, M);                   // total number of work items
     ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);  // size of each work group
@@ -26,35 +28,34 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 2> A_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> B_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
-        cgh.parallel_for<class matrix_multiplication>(nd_range, [=](::sycl::nd_item<2> item) {
-            auto cache_row = item.get_local_id(0);
-            auto cache_col = item.get_local_id(1);
+        cgh.parallel_for<class matrix_multiplication>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+            auto row = item.get_local_id(0);
+            auto col = item.get_local_id(1);
 
-            auto row = item.get_global_id(0);
-            auto col = item.get_global_id(1);
+            auto global_row = item.get_global_id(0);
+            auto global_col = item.get_global_id(1);
 
             real_type sum{ 0 };
 
             // loop over blocks
-            for (std::size_t block = 0; block < N; block += BLOCK_SIZE) {
-                A_cache[cache_row][cache_col] = A(row, block + cache_col);
-                B_cache[cache_row][cache_col] = B(block + cache_row, col);
+            for (std::size_t offset = 0; offset < K; offset += BLOCK_SIZE) {
+                A_cache[row][col] = A(global_row, offset + col);
+                B_cache[row][col] = B(offset + row, global_col);
 
                 // synchronize to make sure all threads have loaded their data
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 // perform multiplication for the current block, i.e.
                 // dot product of a row from A and a column from B
-
-                for (std::size_t k = 0; k < BLOCK_SIZE; ++k) {
-                    sum += A_cache[cache_row][k] * B_cache[k][cache_col];
+                for (std::size_t i = 0; i < BLOCK_SIZE; ++i) {
+                    sum += A_cache[row][i] * B_cache[i][col];
                 }
 
                 // sychronize before loading the next block
                 item.barrier(::sycl::access::fence_space::local_space);
             }
 
-            C(row, col) = sum;
+            C(global_row, global_col) = sum;
         });
     });
     event.wait();
