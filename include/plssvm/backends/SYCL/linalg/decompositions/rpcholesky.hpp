@@ -88,7 +88,7 @@ class randomly_pivoted_cholesky {
         ::sycl::nd_range<1> nd_range{ ::sycl::range<1>(N_), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE) };
         auto event = queue_.submit([&](::sycl::handler &cgh) {
             auto probabilities = probabilities_.get_access<::sycl::access::mode::discard_write>(cgh);
-            cgh.parallel_for<class update_probabilities>(nd_range, [=](const ::sycl::nd_item<1> &item) {
+            cgh.parallel_for<class rpcholesky_update_probabilities>(nd_range, [=](const ::sycl::nd_item<1> &item) {
                 const auto global_id = item.get_global_id();
                 probabilities[global_id] = D(global_id, global_id) / diag_sum;
             });
@@ -105,7 +105,7 @@ class randomly_pivoted_cholesky {
             const auto N = N_;
             const auto K = K_;
 
-            cgh.parallel_for(nd_range_, [=](const ::sycl::nd_item<1> &item) {
+            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range_, [=](const ::sycl::nd_item<1> &item) {
                 // const auto global_id = item.get_global_id();
                 const auto global_id = item.get_global_id(0);
                 const auto d = D(row_idx, row_idx);

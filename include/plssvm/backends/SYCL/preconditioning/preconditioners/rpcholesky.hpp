@@ -5,25 +5,62 @@
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/backends/SYCL/preconditioning/sycl_preconditioner.hpp"
 
+#ifndef RUNNING_GTEST
+    #include "plssvm/detail/logging.hpp"
+#endif
+
 namespace plssvm::sycl::preconditioning {
 
 using linalg::matrix, linalg::matrix_type;
 
+namespace internal {
+void transform_sigma(::sycl::queue &queue, matrix_view<matrix_type::diagonal> &S, real_type c) {
+    const auto N = std::min(S.n_rows, S.n_cols);
+    ::sycl::nd_range nd_range{ ::sycl::range(N), ::sycl::range(linalg::BLOCK_SIZE * linalg::BLOCK_SIZE) };
+
+    auto event = queue.parallel_for<class transform_sigma>(nd_range, [=](const ::sycl::nd_item<1> &item) {
+        const auto global_idx = item.get_global_id();
+
+        if (global_idx >= N) {
+            return;
+        }
+
+        S(global_idx, global_idx) = (real_type{ 1 } / (S(global_idx, global_idx) * S(global_idx, global_idx) + c)) - (real_type{ 1 } / c);
+    });
+    event.wait();
+}
+}  // namespace internal
+
 class rpcholesky_preconditioner : public sycl_preconditioner {
-    rpcholesky_preconditioner(::sycl::queue &queue, matrix<matrix_type::general> &&M) :
+    rpcholesky_preconditioner(::sycl::queue &queue, matrix_view<matrix_type::symmetric> &K, matrix<matrix_type::general> &&M, real_type c) :
         sycl_preconditioner(queue),
-        M_(std::move(M)) {
+        K_(K),
+        M_(std::move(M)),
+        c_(c) {
     }
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) override {
-        linalg::matrix_multiplication(queue_, M_, B, C);
-        linalg::matrix_addition(queue_, C, real_type{ 1 } / cost_factor_, B);
+        // if (first) {
+        //     first = false;
+        //     return;
+        // }
+        linalg::matrix_multiplication<matrix_type::general>(queue_, M_, B, C);
+        linalg::matrix_addition(queue_, C, real_type{ 1 } / c_, B);
     }
 
-    // TODO implement custom product
+    virtual void custom_product(matrix_view<matrix_type::general> &D, matrix_view<matrix_type::general> &Q) override {
+        linalg::matrix_multiplication(queue_, K_, D, Q);
+        linalg::matrix_addition(queue_, Q, c_, D);
+    }
 
-    const double cost_factor_ = real_type{ 1 };
+    virtual bool has_custom_product() override {
+        return true;
+    }
+
+    bool first = true;
+    matrix_view<matrix_type::symmetric> K_;
     matrix<matrix_type::general> M_;
+    const real_type c_;
 
     friend class rpcholesky_preconditioner_constructor;
 };
@@ -36,36 +73,43 @@ class rpcholesky_preconditioner_constructor {
         c_(c) { }
 
     rpcholesky_preconditioner operator()() {
+        std::chrono::steady_clock::time_point start_time, end_time;
+
+        start_time = std::chrono::steady_clock::now();
         auto G = linalg::randomly_pivoted_cholesky{ queue_, K_, 300 }();
+        end_time = std::chrono::steady_clock::now();
+        auto rpcholesky_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
         auto F = linalg::transposed(queue_, G);
+
+        start_time = std::chrono::steady_clock::now();
         auto [U, S] = linalg::svd(queue_, F);
-        transform_sigma(S);
+        end_time = std::chrono::steady_clock::now();
+        auto svd_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        internal::transform_sigma(queue_, S, c_);
 
         auto UT = linalg::transposed(queue_, U);
+        // auto M = linalg::transposed(queue_, U);
+
+        PLSSVM_ASSERT(linalg::utility::is_valid(U.view()), "not valid");
+        PLSSVM_ASSERT(linalg::utility::is_valid(S.view()), "not valid");
         auto V = linalg::matrix_multiplication(queue_, U.view(), S.view());
+
+        PLSSVM_ASSERT(linalg::utility::is_valid(V.view()), "not valid");
+        PLSSVM_ASSERT(linalg::utility::is_valid(UT.view()), "not valid");
         auto M = linalg::matrix_multiplication(queue_, V.view(), UT.view());
 
-        return rpcholesky_preconditioner{ queue_, std::move(M) };
+#ifndef RUNNING_GTEST
+        plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
+                            "Randomly Pivoted Cholesky timings:\nRPCholesky time: {}.\nSVD (Eigen) time: {}.\n",
+                            rpcholesky_time,
+                            svd_time);
+#endif
+
+        return rpcholesky_preconditioner{ queue_, K_, std::move(M), c_ };
     }
 
   private:
-    void transform_sigma(matrix_view<matrix_type::diagonal> &S) {
-        const auto N = std::min(S.n_rows, S.n_cols);
-        ::sycl::nd_range nd_range{ ::sycl::range(N), ::sycl::range(linalg::BLOCK_SIZE * linalg::BLOCK_SIZE) };
-
-        const auto c = c_;
-        auto event = queue_.parallel_for<class transform_sigma>(nd_range, [=](const ::sycl::nd_item<1> &item) {
-            const auto global_idx = item.get_global_id();
-
-            if (global_idx >= N) {
-                return;
-            }
-
-            S(global_idx, global_idx) = (real_type{ 1 } / (S(global_idx, global_idx) * S(global_idx, global_idx) + c)) - (real_type{ 1 } / c);
-        });
-        event.wait();
-    }
-    
     ::sycl::queue queue_;
     matrix_view<matrix_type::symmetric> K_;
     const real_type c_;
