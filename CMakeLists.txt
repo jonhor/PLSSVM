@@ -203,9 +203,10 @@ include(FetchContent)
 list(APPEND CMAKE_MESSAGE_INDENT "Dependencies:  ")
 
 ## try finding eigen
-find_package(eigen QUIET)
-if (eigen_FOUND)
+find_package(Eigen3 QUIET)
+if (Eigen3_FOUND)
     message(STATUS "Found package eigen")
+    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC Eigen3::Eigen)
 else ()
     message(STATUS "Couldn't find package eigen. Fetching ...")
     FetchContent_Declare(
