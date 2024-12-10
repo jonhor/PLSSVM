@@ -68,6 +68,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
     // timing for each CG iteration
     std::chrono::milliseconds total_iteration_time{};
     std::chrono::milliseconds total_blas_level_3_time{};
+    std::chrono::milliseconds total_preconditioner_application_time{};
 
     //
     // perform Conjugate Gradients (CG) algorithm
@@ -83,7 +84,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
     soa_matrix<real_type> D{ R, shape{ PADDING_SIZE, PADDING_SIZE } };
     if (P.has_value()) {
         // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, R, real_type{ 0.0 }, D);
-        (*P)->apply(R, D);
+        total_preconditioner_application_time += (*P)->apply(R, D);
     }
 
     // delta = R.T * D
@@ -132,7 +133,11 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
 
         // Q = A * D
         soa_matrix<real_type> Q{ shape{ D.num_rows(), D.num_cols() }, shape{ PADDING_SIZE, PADDING_SIZE } };
-        total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, A, D, real_type{ 0.0 }, Q);
+        if (P.has_value() && (*P)->has_custom_product()) {
+            total_blas_level_3_time += (*P)->custom_product(D, Q);
+        } else {
+            total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, A, D, real_type{ 0.0 }, Q);
+        }
 
         // alpha = delta_new / (D^T * Q))
         const std::vector<real_type> alpha = delta / rowwise_dot(D, Q);
@@ -179,8 +184,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
         // else: delta_new = R.T * R
         soa_matrix<real_type> S{ D.shape(), D.padding() };
         if (P.has_value()) {
-            (*P)->apply(R, S);
-            // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, *M, R, real_type{ 0.0 }, S);
+            total_preconditioner_application_time += (*P)->apply(R, S);
             delta = rowwise_dot(R, S);
         } else {
             delta = rowwise_dot(R, R);
@@ -220,6 +224,11 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
                 max_residual_difference_idx,
                 detail::tracking_entry{ "cg", "avg_iteration_time", total_iteration_time / std::max(iter, 1ULL) },
                 detail::tracking_entry{ "cg", "avg_blas_level_3_time", total_blas_level_3_time / (1 + iter + iter / 50) });
+    if (P.has_value()) {
+        detail::log(verbosity_level::full | verbosity_level::timing,
+                    "Applying the preconditioner took an average time of {} per iteration.\n",
+                    detail::tracking_entry{ "cg", "avg_preconditioner_application_time", total_preconditioner_application_time / std::max(iter, 1ULL) });
+    }
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "cg", "residuals", delta }));
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "cg", "target_residuals", eps * eps * delta0 }));
     PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "cg", "epsilon", eps }));

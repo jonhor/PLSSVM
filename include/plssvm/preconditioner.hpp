@@ -12,14 +12,14 @@ class preconditioner {
     /**
      * Apply the precondition matrix by calculating C = M * B
      */
-    virtual void apply(const soa_matrix<real_type> &B, soa_matrix<real_type> &C) = 0;
+    virtual std::chrono::duration<long, std::milli> apply(const soa_matrix<real_type> &B, soa_matrix<real_type> &C) = 0;
 
     /**
      *
      * Some preconditioners provide a custom product function, calculating Q = A * D
      * This is consistent with the cg function from scipy, where it is possible to provide a LinearOperator instead of A.
      */
-    virtual void custom_product(const soa_matrix<real_type> &D, soa_matrix<real_type> &Q) { }
+    virtual std::chrono::duration<long, std::milli> custom_product(const soa_matrix<real_type> &D, soa_matrix<real_type> &Q) = 0;
 
     /**
      * This function can be used to query whether the preconditioner provides a custom product function.

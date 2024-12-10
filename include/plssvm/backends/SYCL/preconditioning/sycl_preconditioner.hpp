@@ -10,7 +10,9 @@ using linalg::matrix_type, linalg::matrix_view;
 
 class sycl_preconditioner : public preconditioner {
   public:
-    virtual void apply(const soa_matrix<real_type> &B, soa_matrix<real_type> &C) override {
+    virtual std::chrono::duration<long, std::milli> apply(const soa_matrix<real_type> &B, soa_matrix<real_type> &C) override {
+        auto start_time = std::chrono::steady_clock::now();
+
         // rows and columns are switched
         // TODO this code should be moved to the constructor? e.g. can we only allocate memory once and reuse it?
 
@@ -30,9 +32,13 @@ class sycl_preconditioner : public preconditioner {
         this->apply(B_view, C_view);
 
         copy_to_host_matrix(queue_, C_view, C);
+
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
     }
 
-    virtual void custom_product(const soa_matrix<real_type> &D, soa_matrix<real_type> &Q) override {
+    virtual std::chrono::duration<long, std::milli> custom_product(const soa_matrix<real_type> &D, soa_matrix<real_type> &Q) override {
+        auto start_time = std::chrono::steady_clock::now();
+
         auto D_ = linalg::empty<matrix_type::general>(queue_, D.num_cols(), D.num_rows(), D.padding().x);
         auto Q_ = linalg::empty<matrix_type::general>(queue_, Q.num_cols(), Q.num_rows(), Q.padding().x);
 
@@ -45,6 +51,8 @@ class sycl_preconditioner : public preconditioner {
         this->custom_product(D_view, Q_view);
 
         copy_to_host_matrix(queue_, Q_view, Q);
+
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
     }
 
   protected:
@@ -53,7 +61,7 @@ class sycl_preconditioner : public preconditioner {
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) = 0;
 
-    virtual void custom_product(matrix_view<matrix_type::general> &D, matrix_view<matrix_type::general> &Q) { }
+    [[maybe_unused]] virtual void custom_product(matrix_view<matrix_type::general> &D, matrix_view<matrix_type::general> &Q) { }
 
     ::sycl::queue queue_;
 };
