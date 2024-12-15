@@ -6,6 +6,8 @@
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/matrix.hpp"
 
+#include "sycl/sycl.hpp"
+
 #include <cstddef>
 
 /**
@@ -48,7 +50,7 @@ template <matrix_type T>
  */
 inline void copy_from_host_matrix(::sycl::queue &queue, matrix_view<matrix_type::general> &A, const soa_matrix<real_type> &H) {
     PLSSVM_ASSERT(H.padding().x == H.padding().y, "padding is to be expected symmetric");
-    const auto H_size_bytes_padded = internal::size_bytes_padded<matrix_type::general>(H.num_rows(), H.num_cols(), H.padding().x);
+    [[maybe_unused]] const auto H_size_bytes_padded = internal::size_bytes_padded<matrix_type::general>(H.num_rows(), H.num_cols(), H.padding().x);
     PLSSVM_ASSERT(H_size_bytes_padded == A.size_bytes_padded(), "A and H do not have the same size");
 
     // auto B = empty<matrix_type::general>(queue, A.num_rows(), A.num_cols(), A.padding().x);

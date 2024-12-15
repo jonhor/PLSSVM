@@ -21,23 +21,18 @@ using svd_return_type = std::tuple<matrix<matrix_type::general>, matrix<matrix_t
 inline svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::general> &A) {
     PLSSVM_ASSERT(A.n_rows >= A.n_cols, "A is expected to have more rows than columns");
 
-    const auto n = static_cast<Eigen::Index>(A.n_rows);
-    const auto m = static_cast<Eigen::Index>(A.n_cols);
-    const auto p = static_cast<Eigen::Index>(A.padding);
+    const auto n = A.n_rows;
+    const auto m = A.n_cols;
+    const auto p = A.padding;
 
-    // std::vector<real_type> A_host(A.size_padded());
-    // queue.copy<real_type>(A.data(), A_host.data(), A.size_padded());
-    //
-    // // Map existing memory to an eigen matrix.
-    // Eigen::OuterStride<Eigen::Dynamic>
-    //     outer_stride(m + p);
-    // Eigen::Map<EigenMatrixT, Eigen::RowMajor, Eigen::OuterStride<Eigen::Dynamic>>
-    //     M(A_host.data(), n, m, outer_stride);
-
+    // Eigen uses signed indices, while matrix_view uses std::size_t.
     EigenMatrixT M(n, m);
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = 0; j < m; ++j) {
-            M(i, j) = A(i, j);
+            auto i_ = static_cast<Eigen::Index>(i);
+            auto j_ = static_cast<Eigen::Index>(j);
+
+            M(i_, j_) = A(i, j);
         }
     }
 
@@ -52,13 +47,18 @@ inline svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::
 
     auto S = zeros<matrix_type::diagonal>(queue, m, m, p);
     for (std::size_t i = 0; i < m; ++i) {
-        S(i, i) = S_(i);
+        auto i_ = static_cast<Eigen::Index>(i);
+
+        S(i, i) = S_(i_);
     }
 
     auto U = zeros<matrix_type::general>(queue, n, m, p);
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = 0; j < m; ++j) {
-            U(i, j) = U_(i, j);
+            auto i_ = static_cast<Eigen::Index>(i);
+            auto j_ = static_cast<Eigen::Index>(j);
+
+            U(i, j) = U_(i_, j_);
         }
     }
 

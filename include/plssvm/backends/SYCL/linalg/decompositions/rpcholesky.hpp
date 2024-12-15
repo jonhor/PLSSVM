@@ -25,13 +25,11 @@ class randomly_pivoted_cholesky {
         K_(K),
         D_(linalg::diagonal(queue, K)),
         D_host(N_) {
-        const auto N = K.n_rows;
         if (k == 0) {
-            k = std::min(static_cast<unsigned int>(std::sqrt(N)), 300u);
-            k = std::max(k, static_cast<unsigned int>(N / 2));
+            k = std::max(static_cast<unsigned int>(std::sqrt(N_)), 300u);
+            k = std::min(k, static_cast<unsigned int>(static_cast<double>(N_) / 2.0));  // dont oversample
         }
 
-        PLSSVM_ASSERT(N > k, "order(A) should be bigger than approximation rank");
         k_ = k;
     }
 
@@ -146,6 +144,6 @@ class randomly_pivoted_cholesky {
 
     unsigned int k_;
 };
-};  // namespace plssvm::sycl::linalg
+}  // namespace plssvm::sycl::linalg
 
 #endif  // PLSSVM_BACKENDS_SYCL_LINALG_RPCHOLESKY_HPP_

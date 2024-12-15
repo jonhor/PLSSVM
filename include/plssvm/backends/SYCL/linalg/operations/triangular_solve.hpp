@@ -11,9 +11,6 @@ namespace plssvm::sycl::linalg {
 
 namespace block {
 
-inline void update(::sycl::queue &queue, const matrix_view<matrix_type::lower> &A, matrix_view<matrix_type::general> &B) {
-}
-
 inline void solve_triangular_lower(::sycl::queue &queue, const matrix_view<matrix_type::lower> &A, matrix_view<matrix_type::general> &B, std::size_t offset, std::size_t rows_to_solve, std::size_t block_size) {
     ::sycl::nd_range nd_range{ ::sycl::range(rows_to_solve, block_size), ::sycl::range(rows_to_solve, block_size) };
 
@@ -84,7 +81,11 @@ inline void solve_triangular_upper(::sycl::queue &queue, const matrix_view<matri
             b_cache[row][col] = B(global_row, col);
             item.barrier(::sycl::access::fence_space::local_space);
 
-            for (int current_row = rows_to_solve - 1; current_row >= 0; --current_row) {
+            // because we use a descending counter we have to be careful with signedness here.
+            auto rows_to_solve_signed = static_cast<long>(rows_to_solve);
+            for (long current_row_signed = rows_to_solve_signed - 1; current_row_signed >= 0; --current_row_signed) {
+                auto current_row = static_cast<std::size_t>(current_row_signed);
+
                 // solve the current row
                 if (row == current_row) {
                     // std::max(eps, a_cache[current_row][current_row]);
@@ -172,9 +173,13 @@ inline void triangular_solve_upper_gpu(::sycl::queue &queue, const matrix_view<m
     /*
      * This algorithm loops over all blocks in X, solving a block and then updating all remaining blocks.
      */
-    const auto total_blocks = static_cast<std::size_t>(std::ceil(N / static_cast<double>(block_size)));
-    const auto offset_start = (total_blocks - 1) * block_size;
-    for (int offset = offset_start; offset >= 0; offset -= block_size) {
+    const auto total_blocks = static_cast<std::size_t>(std::ceil(static_cast<double>(N) / static_cast<double>(block_size)));
+
+    // because we use a descending counter we have to be careful with signedness here.
+    const auto offset_start = static_cast<long>((total_blocks - 1) * block_size);
+    for (long offset_signed = offset_start; offset_signed >= 0; offset_signed -= block_size) {
+        auto offset = static_cast<std::size_t>(offset_signed);
+
         const auto remaining_rows = N - offset;
         const auto rows_to_solve = std::min(block_size, remaining_rows);
         block::solve_triangular_upper(queue, A, B, offset, rows_to_solve, block_size);
@@ -234,7 +239,6 @@ inline void triangular_solve_lower(::sycl::queue &queue, const matrix_view<matri
 
     const auto n = A.n_rows;
     const auto m = B.n_cols;
-    const double epsilon = 1e-6;
 
     for (std::size_t col = 0; col < m; ++col) {
         for (std::size_t row = 0; row < n; ++row) {
@@ -243,8 +247,7 @@ inline void triangular_solve_lower(::sycl::queue &queue, const matrix_view<matri
                 sum += A(row, k) * X(k, col);
             }
 
-            double scaled_epsilon = std::max(epsilon, std::abs(A(row, row)) * epsilon);  // Adjust epsilon based on the diagonal
-            X(row, col) = (X(row, col) - sum) / (A(row, row) + scaled_epsilon);
+            X(row, col) = (X(row, col) - sum) / A(row, row);
         }
     }
 }
@@ -254,7 +257,6 @@ inline void triangular_solve_upper(::sycl::queue &queue, const matrix_view<matri
 
     const auto n = A.n_rows;
     const auto m = B.n_cols;
-    const real_type epsilon = 1e-8;
 
     for (std::size_t col = 0; col < m; ++col) {
         for (std::size_t i = 0; i < n; ++i) {
@@ -266,8 +268,7 @@ inline void triangular_solve_upper(::sycl::queue &queue, const matrix_view<matri
                 sum += A(current_idx, current_j) * X(current_j, col);
             }
 
-            double scaled_epsilon = std::max(epsilon, std::abs(A(current_idx, current_idx)) * epsilon);  // Adjust epsilon based on the diagonal
-            X(current_idx, col) = (X(current_idx, col) - sum) / (A(current_idx, current_idx) + scaled_epsilon);
+            X(current_idx, col) = (X(current_idx, col) - sum) / A(current_idx, current_idx);
         }
     }
 }

@@ -145,7 +145,7 @@ class cholesky_decomposition {
                     if (cache[current_row][current_row] <= real_type{ 0 }) {
                         // only a single thread sets the error flag but all threads terminate
                         if (row == 0 && col == 0) {
-                            error_flag[0] = current_row + row_offset;
+                            error_flag[0] = static_cast<int>(current_row + row_offset);
                         }
                         return;
                     }

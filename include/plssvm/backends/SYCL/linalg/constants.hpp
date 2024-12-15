@@ -7,7 +7,7 @@
 
 namespace plssvm::sycl::linalg {
 
-constexpr real_type eps = 1e-10;
+constexpr real_type eps = static_cast<real_type>(1e-10);
 
 constexpr unsigned MAX_BLOCK_SIZE = 32;  // depends on hardware
 constexpr unsigned BLOCK_SIZE = std::min(PADDING_SIZE, MAX_BLOCK_SIZE);

@@ -58,7 +58,7 @@ struct parser_train {
     backend_type backend{ backend_type::automatic };
     /// The target platform: automatic (depending on the used backend), CPUs or GPUs from NVIDIA, AMD, or Intel.
     target_platform target{ target_platform::automatic };
-    /// The used preconditioner type: none or jacobi
+    /// The used preconditioner type
     preconditioner_type preconditioner{ preconditioner_type::none };
     /// The used solver type for the LS-SVM kernel matrix: automatic (depending on the available (V)RAM), cg_explicit, or cg_implicit.
     solver_type solver{ solver_type::automatic };

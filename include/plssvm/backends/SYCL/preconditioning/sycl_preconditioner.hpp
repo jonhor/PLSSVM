@@ -61,7 +61,7 @@ class sycl_preconditioner : public preconditioner {
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) = 0;
 
-    [[maybe_unused]] virtual void custom_product(matrix_view<matrix_type::general> &D, matrix_view<matrix_type::general> &Q) { }
+    virtual void custom_product([[maybe_unused]] matrix_view<matrix_type::general> &D, [[maybe_unused]] matrix_view<matrix_type::general> &Q) { }
 
     ::sycl::queue queue_;
 };

@@ -40,10 +40,6 @@ class rpcholesky_preconditioner : public sycl_preconditioner {
     }
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) override {
-        // if (first) {
-        //     first = false;
-        //     return;
-        // }
         linalg::matrix_multiplication<matrix_type::general>(queue_, M_, B, C);
         linalg::matrix_addition(queue_, C, real_type{ 1 } / c_, B);
     }
@@ -57,7 +53,6 @@ class rpcholesky_preconditioner : public sycl_preconditioner {
         return true;
     }
 
-    bool first = true;
     matrix_view<matrix_type::symmetric> K_;
     matrix<matrix_type::general> M_;
     const real_type c_;
@@ -76,7 +71,7 @@ class rpcholesky_preconditioner_constructor {
         std::chrono::steady_clock::time_point start_time, end_time;
 
         start_time = std::chrono::steady_clock::now();
-        auto G = linalg::randomly_pivoted_cholesky{ queue_, K_, 300 }();
+        auto G = linalg::randomly_pivoted_cholesky{ queue_, K_ }();
         end_time = std::chrono::steady_clock::now();
         auto rpcholesky_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
@@ -89,14 +84,7 @@ class rpcholesky_preconditioner_constructor {
         internal::transform_sigma(queue_, S, c_);
 
         auto UT = linalg::transposed(queue_, U);
-        // auto M = linalg::transposed(queue_, U);
-
-        PLSSVM_ASSERT(linalg::utility::is_valid(U.view()), "not valid");
-        PLSSVM_ASSERT(linalg::utility::is_valid(S.view()), "not valid");
         auto V = linalg::matrix_multiplication(queue_, U.view(), S.view());
-
-        PLSSVM_ASSERT(linalg::utility::is_valid(V.view()), "not valid");
-        PLSSVM_ASSERT(linalg::utility::is_valid(UT.view()), "not valid");
         auto M = linalg::matrix_multiplication(queue_, V.view(), UT.view());
 
 #ifndef RUNNING_GTEST
