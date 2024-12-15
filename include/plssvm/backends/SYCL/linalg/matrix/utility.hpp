@@ -65,6 +65,22 @@ template <matrix_type T>
             });
         });
         event.wait();
+    } else if constexpr (T == matrix_type::lower) {
+        /*
+         * Optimize: see upper
+         */
+        auto event = queue.submit([&](::sycl::handler &cgh) {
+            auto data_acc = data_buffer.get_access<::sycl::access_mode::read>(cgh);
+            cgh.single_task([=]() {
+                std::size_t cur_idx = 0;
+                for (std::size_t i = 0; i < N; ++i) {
+                    for (std::size_t j = 0; j <= i; ++j) {
+                        A(i, j) = data_acc[cur_idx++];
+                    }
+                }
+            });
+        });
+        event.wait();
     } else if constexpr (T == matrix_type::diagonal) {
         ::sycl::nd_range<1> nd_range{ ::sycl::range(size), ::sycl::range(linalg::BLOCK_SIZE * linalg::BLOCK_SIZE) };
 
@@ -81,9 +97,7 @@ template <matrix_type T>
             });
         });
         event.wait();
-    }
-
-    else {
+    } else {
         static_assert(false);
     }
 
@@ -110,7 +124,7 @@ template <matrix_type T>
     file_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    const auto n_elements = file_size / sizeof(double);
+    const auto n_elements = static_cast<std::size_t>(file_size / static_cast<std::streamoff>(sizeof(double)));
     const auto matrix_size = linalg::internal::size<T>(n_rows, n_cols);
     PLSSVM_ASSERT(n_elements == matrix_size, fmt::format("number of elements in file does not equal the expected matrix size, {} != {}", n_elements, matrix_size));
 
@@ -126,7 +140,45 @@ template <matrix_type T>
 }
 
 template <matrix_type T>
-void print(::sycl::queue &queue, const matrix_view<T> &A) {
+bool is_valid(const matrix_view<T> &A) {
+    if constexpr (T == matrix_type::upper) {
+        for (std::size_t i = 0; i < A.n_rows; ++i) {
+            for (std::size_t j = i; j < A.n_rows; ++j) {
+                const auto value = A(i, j);
+                if (std::isnan(value) || std::isinf(value)) {
+                    fmt::println("index ({}, {}) is not valid", i, j);
+                    return false;
+                }
+            }
+        }
+    } else if constexpr (T == matrix_type::general) {
+        for (std::size_t i = 0; i < A.n_rows; ++i) {
+            for (std::size_t j = 0; j < A.n_cols; ++j) {
+                const auto value = A(i, j);
+                if (std::isnan(value) || std::isinf(value)) {
+                    fmt::println("index ({}, {}) is not valid", i, j);
+                    return false;
+                }
+            }
+        }
+    } else if constexpr (T == matrix_type::diagonal) {
+        const auto n = std::min(A.n_rows, A.n_cols);
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto value = A(i, i);
+            if (std::isnan(value) || std::isinf(value)) {
+                fmt::println("index ({}, {}) is not valid", i, i);
+                return false;
+            }
+        }
+    } else {
+        PLSSVM_ASSERT(false, "not implemented");
+    }
+
+    return true;
+}
+
+template <matrix_type T>
+void print(const matrix_view<T> &A) {
     // printing is only allowed in shared mode for now.
     static_assert(linalg::internal::alloc_mode == linalg::internal::allocation_mode::shared);
 
