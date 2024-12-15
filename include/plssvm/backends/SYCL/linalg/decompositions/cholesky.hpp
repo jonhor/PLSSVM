@@ -18,8 +18,7 @@ class cholesky_decomposition {
         A_(A),
         U_matrix(empty<matrix_type::upper>(queue, A.n_rows, A.n_rows, A.padding)),
         // U_(U_matrix.view()),
-        block_size_(block_size == 0 ? BLOCK_SIZE : block_size),
-        error_flag_(1) {
+        block_size_(block_size == 0 ? BLOCK_SIZE : block_size) {
     }
 
     inline matrix<matrix_type::upper> operator()() {
@@ -29,12 +28,6 @@ class cholesky_decomposition {
          * upper triangular matrix.
          */
         queue_.memcpy(U_matrix->data(), A_.data(), A_.size_bytes_padded()).wait();
-
-        // sets initial error flag value of -1
-        {
-            auto error_flag = error_flag_.get_access<::sycl::access_mode::discard_write>();
-            error_flag[0] = -1;
-        }
 
         /*
          * The loop consists of 3 main steps that are performed until the full decomposition is computed.
@@ -47,29 +40,14 @@ class cholesky_decomposition {
         for (std::size_t row_offset = 0; row_offset < N; row_offset += block_size_) {
             const auto remaining_block_size = std::min(block_size_, N - row_offset);
 
-            /*
-             * Factorize the current diagonal block.
-             * This step can fail in which case the error flag will be set with the value of the row / diagonal element it failed on.
-             * A failure indicates that the positive definite property of A is violated, meaning A is in fact not positive definite.
-             * In theory A is only required to be positive semi-definite but in practice most algorithms require a
-             * positive definite matrix to avoid division by zero and numerical instabilities.
-             */
             start_time = std::chrono::steady_clock::now();
             factorize_block(row_offset, remaining_block_size).wait();
             end_time = std::chrono::steady_clock::now();
             total_factorization_time_ += std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-            // check error flag
-            {
-                auto error_flag = error_flag_.get_access<::sycl::access_mode::read>();
-                if (error_flag[0] >= 0) {
-                    fmt::println(std::cerr, "Cholesky decomposition failed at diagonal entry ({}, {}), A is not positive definite.", error_flag[0], error_flag[0]);
-                    std::exit(EXIT_FAILURE);
-                }
-            }
-
             // solve all trailing blocks in the same row
             start_time = std::chrono::steady_clock::now();
+            // #pragma omp_parallel
             for (std::size_t col_offset = row_offset + block_size_; col_offset < N; col_offset += block_size_) {
                 solve_block(row_offset, col_offset);
             }
@@ -79,6 +57,7 @@ class cholesky_decomposition {
 
             // update the blocks in the trailing submatrix
             start_time = std::chrono::steady_clock::now();
+            // omp_parallel!
             for (std::size_t trailing_row_offset = row_offset + block_size_; trailing_row_offset < N; trailing_row_offset += block_size_) {
                 // TODO this can be calculated directly
                 std::size_t blocks_in_row = 0;
@@ -121,9 +100,12 @@ class cholesky_decomposition {
         ::sycl::nd_range nd_range{ local_range, local_range };
 
         auto U_ = U_matrix.view();
+
+        // use the smallest possible epsilon for the selected real type to stabilize the decomposition.
+        auto smallest_eps = std::numeric_limits<real_type>::epsilon();
+
         return queue_.submit([&](::sycl::handler &cgh) {
             ::sycl::local_accessor<real_type, 2> cache(local_range, cgh);
-            auto error_flag = error_flag_.get_access<::sycl::access_mode::write>(cgh);
 
             cgh.parallel_for<class cholesky_factorize_block>(nd_range, [=](const ::sycl::nd_item<2> &item) {
                 const auto row = item.get_local_id(0);
@@ -140,18 +122,21 @@ class cholesky_decomposition {
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 for (std::size_t current_row = 0; current_row < block_size; ++current_row) {
-                    // if the diagonal element is smaller or equal to zero the matrix is
-                    // not positive definite and we will error out
-                    if (cache[current_row][current_row] <= real_type{ 0 }) {
-                        // only a single thread sets the error flag but all threads terminate
-                        if (row == 0 && col == 0) {
-                            error_flag[0] = static_cast<int>(current_row + row_offset);
-                        }
-                        return;
-                    }
+                    /*
+                     * For the cholesky decomposition to work correctly the matrix is required to be positive semi-definite.
+                     * In practice most algorithms require the matrix to be positive definite to avoid dividing by zero.
+                     * While kernel matrices fulfill this requirement in theory, diagonal elements can still become negative
+                     * due to numerical instability / inaccuracies.
+                     *
+                     * This is why we clip diagonal elements to be at least the smallest possible epsilon depending on the selected real type.
+                     */
 
-                    // compute the diagonal element for the current row
-                    cache[current_row][current_row] = ::sycl::sqrt(cache[current_row][current_row]);
+                    // only one thread accesses and updates the diagonal element of the current row.
+                    if (row == 0 && col == 0) {
+                        auto diag_element = ::sycl::max(cache[current_row][current_row], smallest_eps);
+                        cache[current_row][current_row] = ::sycl::sqrt(diag_element);
+                    }
+                    item.barrier(::sycl::access::fence_space::local_space);
 
                     // update the rest of the row
                     if (row == current_row && col > current_row) {
@@ -199,7 +184,7 @@ class cholesky_decomposition {
                 // transpose the data in the diagonal block to perform a forward substitution
                 if (row <= col) {
                     d_cache[col][row] = U_(global_row, diag_col);
-                }
+                }  // TODO amd else memory is not nulled
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 for (std::size_t current_row = 0; current_row < N; ++current_row) {
@@ -265,7 +250,6 @@ class cholesky_decomposition {
     matrix<matrix_type::upper> U_matrix;
     // matrix_view<matrix_type::upper> U_;
     const std::size_t block_size_;
-    ::sycl::buffer<int, 1> error_flag_;
 
     std::chrono::milliseconds total_factorization_time_{ 0 };
     std::chrono::milliseconds total_solve_time_{ 0 };
