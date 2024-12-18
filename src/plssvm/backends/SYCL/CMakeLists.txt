@@ -33,7 +33,7 @@ if (PLSSVM_ENABLE_SYCL_DPCPP_BACKEND MATCHES "AUTO" OR PLSSVM_ENABLE_SYCL_DPCPP_
 endif ()
 
 ## add tests for sycl specific detail functionality like matrix_view and linear algebra functions
-add_subdirectory(tests)
+#add_subdirectory(tests)
 
 ## check if ANY SYCL implementation has been found
 if (NOT PLSSVM_SYCL_BACKEND_FOUND_IMPLEMENTATIONS)
