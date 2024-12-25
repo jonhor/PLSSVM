@@ -21,7 +21,7 @@ inline void solve_triangular_lower(::sycl::queue &queue, const matrix_view<matri
         ::sycl::local_accessor<real_type, 2> a_cache(solve_range, cgh);  // diagonal block from A
         ::sycl::local_accessor<real_type, 2> b_cache(solve_range, cgh);
 
-        cgh.parallel_for<class trsm_solve_lower_block>(execution_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class trsm_solve_lower_block>(execution_range, [=](::sycl::nd_item<2> item) {
             const auto row = item.get_local_id(0);
             const auto col = item.get_local_id(1);
             // we only have 1 work-group
@@ -66,7 +66,7 @@ inline void solve_triangular_upper(::sycl::queue &queue, const matrix_view<matri
         ::sycl::local_accessor<real_type, 2> a_cache(solve_range, cgh);  // diagonal block from A
         ::sycl::local_accessor<real_type, 2> b_cache(solve_range, cgh);
 
-        cgh.parallel_for<class trsm_solve_upper_block>(execution_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class trsm_solve_upper_block>(execution_range, [=](::sycl::nd_item<2> item) {
             const auto row = item.get_local_id(0);
             const auto col = item.get_local_id(1);
 
@@ -139,7 +139,7 @@ inline void triangular_solve_lower_gpu(::sycl::queue &queue, const matrix_view<m
             ::sycl::local_accessor<real_type, 2> a_cache(local_range, cgh);  // diagonal block from A that is multiplied with this block
             ::sycl::local_accessor<real_type, 2> b_cache(local_range, cgh);  // block from B that was last solved
 
-            cgh.parallel_for<class trsm_update_blocks>(execution_range, [=](const ::sycl::nd_item<2> &item) {
+            cgh.parallel_for<class trsm_lower_update_blocks>(execution_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 auto global_row = item.get_global_id(0) + offset + block_size;
@@ -197,7 +197,7 @@ inline void triangular_solve_upper_gpu(::sycl::queue &queue, const matrix_view<m
             ::sycl::local_accessor<real_type, 2> a_cache(local_range, cgh);  // diagonal block from A that is multiplied with this block
             ::sycl::local_accessor<real_type, 2> b_cache(local_range, cgh);  // block from B that was last solved
 
-            cgh.parallel_for<class trsm_update_blocks>(execution_range, [=](const ::sycl::nd_item<2> &item) {
+            cgh.parallel_for<class trsm_upper_update_blocks>(execution_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 auto global_row = item.get_global_id(0);

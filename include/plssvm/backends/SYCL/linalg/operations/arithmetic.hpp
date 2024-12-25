@@ -10,7 +10,7 @@ namespace plssvm::sycl::linalg {
  * Matrix Multiplication
  * C = A @ B
  */
-template <matrix_type T, typename = typename std::enable_if<T == matrix_type::general || T == matrix_type::symmetric>::type>
+template <matrix_type T, typename = std::enable_if_t<T == matrix_type::general || T == matrix_type::symmetric>>
 inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<T> &A, const matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) {
     PLSSVM_ASSERT(A.n_cols == B.n_rows, "A should have the same number of columns as B has rows");
     PLSSVM_ASSERT(A.n_rows == C.n_rows, "C should have the same number of rows as A");
@@ -28,7 +28,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<T> &A,
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 2> A_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> B_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
-        cgh.parallel_for<class matrix_multiplication>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for(nd_range, [=](::sycl::nd_item<2> item) {
             auto row = item.get_local_id(0);
             auto col = item.get_local_id(1);
 
@@ -82,7 +82,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 1> diag_cache(::sycl::range<1>(BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> B_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
-        cgh.parallel_for<class diagonal_matrix_multiplication_lhs>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class diagonal_matrix_multiplication_lhs>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto local_row = item.get_local_id(0);
             const auto local_col = item.get_local_id(1);
 
@@ -132,7 +132,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 1> diag_cache(::sycl::range<1>(BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> A_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
-        cgh.parallel_for<class diagonal_matrix_multiplication_rhs>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class diagonal_matrix_multiplication_rhs>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto local_row = item.get_local_id(0);
             const auto local_col = item.get_local_id(1);
 
@@ -184,7 +184,7 @@ inline void matrix_addition(::sycl::queue &queue, matrix_view<matrix_type::gener
     const auto M = A.n_cols;
 
     ::sycl::nd_range nd_range{ ::sycl::range(N, M), ::sycl::range(BLOCK_SIZE, BLOCK_SIZE) };
-    auto event = queue.parallel_for(nd_range, [=](::sycl::nd_item<2> &item) {
+    auto event = queue.parallel_for<class matrix_addition>(nd_range, [=](::sycl::nd_item<2> item) {
         const auto global_row = item.get_global_id(0);
         const auto global_col = item.get_global_id(1);
 
@@ -192,33 +192,6 @@ inline void matrix_addition(::sycl::queue &queue, matrix_view<matrix_type::gener
     });
     event.wait();
 }
-
-// inline matrix < matrix_type::
-
-// inline matrix<matrix_type::general> subtract(::sycl::queue &queue, const matrix_view<matrix_type::general> &A, const matrix_view<matrix_type::general> &B) {
-//     PLSSVM_ASSERT(A.shape == B.shape, "A and B are expected to have the same shape");
-//     auto C_ = detail::utility::create_managed_view<matrix_type::general>(queue, A.n_rows, A.n_cols, PADDING_SIZE);
-//     auto C = C_.view();
-//
-//     auto N = A.n_rows;
-//     auto M = A.n_cols;
-//
-//     auto event = queue.submit([&](::sycl::handler &cgh) {
-//         ::sycl::range<2> global_range(N, M);
-//         ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);
-//         ::sycl::nd_range<2> nd_range(global_range, local_range);
-//
-//         cgh.parallel_for(nd_range, [=](const ::sycl::nd_item<2> &item) {
-//             const auto global_row = item.get_global_id(0);
-//             const auto global_col = item.get_global_id(1);
-//
-//             C(global_row, global_col) = A(global_row, global_col) - B(global_row, global_col);
-//         });
-//     });
-//     event.wait();
-//
-//     return C_;
-// }
 
 }  // namespace plssvm::sycl::linalg
 #endif  // PLSSVM_PARALLEL_LEAST_SQUARES_SUPPORT_VECTOR_MACHINE_ARITHMETIC_HPP

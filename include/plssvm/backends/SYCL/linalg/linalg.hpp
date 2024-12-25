@@ -2,9 +2,6 @@
 #define PLSSVM_BACKENDS_SYCL_LINALG_LINALG_HPP_
 
 #include "constants.hpp"
-#include "norms.hpp"
-#include "transforms.hpp"
-#include "utils.hpp"
 
 // matrix abstraction
 #include "plssvm/backends/SYCL/linalg/matrix/common.hpp"
@@ -20,11 +17,10 @@
 
 // decompositions
 #include "plssvm/backends/SYCL/linalg/decompositions/cholesky.hpp"
-// #include "plssvm/backends/SYCL/linalg/decompositions/qr.hpp"
 #include "plssvm/backends/SYCL/linalg/decompositions/rpcholesky.hpp"
 #include "plssvm/backends/SYCL/linalg/decompositions/svd.hpp"
 
 // other
-#include "plssvm/backends/SYCL/linalg/utils.hpp"
+//#include "plssvm/backends/SYCL/linalg/utils.hpp"
 
 #endif  // PLSSVM_BACKENDS_SYCL_LINALG_LINALG_HPP_

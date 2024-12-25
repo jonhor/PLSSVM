@@ -20,6 +20,8 @@
 #include "plssvm/backends/SYCL/kernel/cg_implicit/kernel_matrix_assembly_blas.hpp"  // plssvm::sycl::detail::device_kernel_assembly_symm
 #include "plssvm/backends/SYCL/kernel/predict_kernel.hpp"                           // plssvm::sycl::detail::{device_kernel_w_linear, device_kernel_predict_linear, device_kernel_predict}
 #include "plssvm/backends/SYCL/kernel_invocation_types.hpp"                         // plssvm::kernel_invocation_type
+#include "plssvm/backends/SYCL/linalg/linalg.hpp"                                   // plssvm::sycl::linalg::matrix
+#include "plssvm/backends/SYCL/preconditioning/preconditioners.hpp"                 // plssvm::sycl::preconditioning::{dummy, cholesky, jacobi, rpcholesky}
 #include "plssvm/constants.hpp"                                                     // plssvm::{real_type, THREAD_BLOCK_SIZE, INTERNAL_BLOCK_SIZE, PADDING_SIZE}
 #include "plssvm/detail/assert.hpp"                                                 // PLSSVM_ASSERT
 #include "plssvm/detail/data_distribution.hpp"                                      // plssvm::detail::{data_distribution, triangular_data_distribution, rectangular_data_distribution}
@@ -261,6 +263,64 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
 
     return kernel_matrix_d;
 }
+
+auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d) const -> std::unique_ptr<preconditioner> {
+    using namespace plssvm::sycl;
+
+    PLSSVM_ASSERT(!kernel_matrix_d.is_padded(), "Kernel matrix in triangular form shouldn't be padded");
+    using namespace sycl::linalg;
+
+    const queue_type &device = devices_[device_id];
+    const std::size_t N = kernel_matrix_d.size();
+
+    // padding is not correctly set for kernel_matrix_d
+    // which is why we have to subtract it from the order here
+    auto order = static_cast<std::size_t>((std::sqrt(1 + (8 * N)) - 1) / 2.0);
+    order -= PADDING_SIZE;
+    const auto data = kernel_matrix_d.get();
+
+    auto K = matrix_view<matrix_type::symmetric>(data, order, order, PADDING_SIZE);
+    auto &queue = device.impl->sycl_queue;
+
+    // {
+    //     auto sycl_device = queue.get_device();
+    //     fmt::println("==========");
+    //     fmt::println("{}", sycl_device.get_info<::sycl::info::device::max_work_group_size>());
+    //     fmt::println("==========");
+    // }
+
+
+    switch (preconditioner_type) {
+        case preconditioner_type::jacobi:
+            {
+                auto construct_jacobi_preconditioner = preconditioning::jacobi_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::jacobi_preconditioner>(construct_jacobi_preconditioner());
+            }
+        case preconditioner_type::cholesky:
+            {
+                auto construct_cholesky_preconditioner = preconditioning::cholesky_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::cholesky_preconditioner>(construct_cholesky_preconditioner());
+            }
+        case preconditioner_type::rpcholesky:
+            {
+                // TODO pass cost_factor here instead of 1
+                auto construct_rpcholesky_preconditioner = preconditioning::rpcholesky_preconditioner_constructor{ queue, K, real_type{ 1 } };
+                return std::make_unique<preconditioning::rpcholesky_preconditioner>(construct_rpcholesky_preconditioner());
+            }
+        case preconditioner_type::dummy:
+            {
+                auto construct_dummy_preconditioner = preconditioning::dummy_preconditioner_constructor{ queue, K };
+                return std::make_unique<preconditioning::dummy_preconditioner>(construct_dummy_preconditioner());
+            }
+        case preconditioner_type::none:
+            {
+                plssvm::detail::unreachable();
+            }
+    }
+
+    plssvm::detail::unreachable();
+}
+
 
 void csvm::run_blas_level_3_kernel_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const ::plssvm::detail::execution_range &mirror_exec, const real_type alpha, const device_ptr_type &A_d, const device_ptr_type &B_d, const real_type beta, device_ptr_type &C_d) const {
     const std::size_t num_rhs = B_d.shape().x;

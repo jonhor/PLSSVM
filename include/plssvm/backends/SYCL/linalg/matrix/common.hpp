@@ -104,7 +104,7 @@ template <matrix_type T>
 
     auto D = D_.view();
     ::sycl::nd_range<1> nd_range(::sycl::range(n_elements), ::sycl::range(BLOCK_SIZE * BLOCK_SIZE));
-    auto event = queue.parallel_for<class copy_diagonal_elements>(nd_range, [=](const ::sycl::nd_item<1> &item) {
+    auto event = queue.parallel_for<class copy_diagonal_elements>(nd_range, [=](::sycl::nd_item<1> item) {
         const auto global_id = item.get_global_id();
         D(global_id, global_id) = A(global_id, global_id);
     });
@@ -125,7 +125,7 @@ template <matrix_type T>
     ::sycl::nd_range<2> nd_range(global_range, local_range);
 
     auto event = queue.submit([&](::sycl::handler &cgh) {
-        cgh.parallel_for<class transpose>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class general_transpose>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto global_row = item.get_global_id(0);
             const auto global_col = item.get_global_id(1);
 
@@ -149,7 +149,7 @@ template <matrix_type T>
     ::sycl::nd_range nd_range{ ::sycl::range(U.n_rows, U.n_cols), ::sycl::range(BLOCK_SIZE, BLOCK_SIZE) };
 
     auto event = queue.submit([&](::sycl::handler &cgh) {
-        cgh.parallel_for<class transpose>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+        cgh.parallel_for<class upper_transpose>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto global_row = item.get_global_id(0);
             const auto global_col = item.get_global_id(1);
 

@@ -81,12 +81,12 @@ class randomly_pivoted_cholesky {
         // A showcase on how to implement a reduction operation from scratch can be seen in linalg/norms.hpp (frobenius).
         // Because of time constraints we copy the data to a host memory location and reduce it with the stdlib interfaces provided by C++.
         queue_.copy<real_type>(D.data(), D_host.data(), N_);
-        const auto diag_sum = std::reduce(std::execution::par, D_host.begin(), D_host.end());
+        const auto diag_sum = std::reduce(D_host.begin(), D_host.end());
 
         ::sycl::nd_range<1> nd_range{ ::sycl::range<1>(N_), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE) };
         auto event = queue_.submit([&](::sycl::handler &cgh) {
             auto probabilities = probabilities_.get_access<::sycl::access::mode::discard_write>(cgh);
-            cgh.parallel_for<class rpcholesky_update_probabilities>(nd_range, [=](const ::sycl::nd_item<1> &item) {
+            cgh.parallel_for<class rpcholesky_update_probabilities>(nd_range, [=](::sycl::nd_item<1> item) {
                 const auto global_id = item.get_global_id();
                 probabilities[global_id] = D(global_id, global_id) / diag_sum;
             });
@@ -103,7 +103,7 @@ class randomly_pivoted_cholesky {
             const auto N = N_;
             const auto K = K_;
 
-            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range_, [=](const ::sycl::nd_item<1> &item) {
+            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range_, [=](::sycl::nd_item<1> item) {
                 // const auto global_id = item.get_global_id();
                 const auto global_id = item.get_global_id(0);
                 const auto d = D(row_idx, row_idx);
@@ -122,8 +122,8 @@ class randomly_pivoted_cholesky {
                 }
                 r -= dot;
 
-                const auto g = r / ::sycl::sqrt(d);
-                D(global_id, global_id) = ::sycl::max(real_type{ 0 }, D(global_id, global_id) - g * g);
+                const auto g = r / std::sqrt(d);
+                D(global_id, global_id) = std::max(real_type{ 0 }, D(global_id, global_id) - g * g);
                 G(i, global_id) = g;
             });
         });

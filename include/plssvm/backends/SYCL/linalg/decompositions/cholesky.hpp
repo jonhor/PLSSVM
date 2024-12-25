@@ -107,7 +107,7 @@ class cholesky_decomposition {
         return queue_.submit([&](::sycl::handler &cgh) {
             ::sycl::local_accessor<real_type, 2> cache(local_range, cgh);
 
-            cgh.parallel_for<class cholesky_factorize_block>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+            cgh.parallel_for<class cholesky_factorize_block>(nd_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 const auto global_row = row + row_offset;
@@ -221,7 +221,7 @@ class cholesky_decomposition {
             const ::sycl::local_accessor<real_type, 2> i_cache(local_range, cgh);
             const ::sycl::local_accessor<real_type, 2> j_cache(local_range, cgh);
 
-            cgh.parallel_for<class cholesky_update_trailing_block_row>(nd_range, [=](const ::sycl::nd_item<2> &item) {
+            cgh.parallel_for<class cholesky_update_trailing_block_row>(nd_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 const auto global_row = row + row_offset;

@@ -4,7 +4,7 @@
 #include "plssvm/backends/SYCL/linalg/matrix/matrix_types.hpp"
 #include "plssvm/backends/SYCL/linalg/matrix/matrix_view.hpp"
 
-#include "SYCL/sycl.hpp"
+#include "sycl/sycl.hpp"
 
 #include "constants.hpp"
 #include <algorithm>

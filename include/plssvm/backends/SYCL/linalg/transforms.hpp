@@ -1,9 +1,0 @@
-#ifndef PLSSVM_BACKENDS_SYCL_LINALG_TRANSFORMS_HPP_
-#define PLSSVM_BACKENDS_SYCL_LINALG_TRANSFORMS_HPP_
-
-#include "utils.hpp"
-
-struct HouserholderReflection {
-};
-
-#endif  // PLSSVM_BACKENDS_SYCL_LINALG_TRANSFORMS_HPP_
