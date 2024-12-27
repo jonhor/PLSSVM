@@ -202,31 +202,6 @@ endif ()
 include(FetchContent)
 list(APPEND CMAKE_MESSAGE_INDENT "Dependencies:  ")
 
-## try finding eigen
-find_package(Eigen3 QUIET)
-if (Eigen3_FOUND)
-    message(STATUS "Found package eigen")
-    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC Eigen3::Eigen)
-else ()
-    message(STATUS "Couldn't find package eigen. Fetching ...")
-    FetchContent_Declare(
-            eigen
-            GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-            GIT_TAG 3.4.0
-    )
-    FetchContent_MakeAvailable(eigen)
-    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC Eigen3::Eigen)
-endif ()
-
-## try finding tbb
-# I'm honestly not sure which package depends on tbb (maybe eigen?).
-# But because it is installed on the simcl1 cluster there is a compile time error when it is available
-# but not linked.
-find_package(TBB QUIET)
-if (TBB_FOUND)
-    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC TBB::tbb)
-endif ()
-
 ## try finding cxxopts
 find_package(cxxopts 3.2.0 QUIET)
 if (cxxopts_FOUND)

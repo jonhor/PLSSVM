@@ -32,7 +32,9 @@ if (PLSSVM_SYCL_BACKEND_CHECK_FOR_DPCPP_COMPILER)
         ${CMAKE_CURRENT_LIST_DIR}/detail/device_ptr.cpp
         ${CMAKE_CURRENT_LIST_DIR}/detail/pinned_memory.cpp
         ${CMAKE_CURRENT_LIST_DIR}/detail/utility.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/linalg/svd.cpp
         ${CMAKE_CURRENT_LIST_DIR}/csvm.cpp
+
     )
     
     # set target properties
@@ -162,3 +164,11 @@ if (PLSSVM_SYCL_BACKEND_CHECK_FOR_DPCPP_COMPILER)
 else ()
     message(CHECK_FAIL "not found")
 endif ()
+
+
+# if compiling with dpcpp/icpx we use oneMKL to implement SVD
+message("oneMKL is required when compiling with DPC++")
+find_package(MKL CONFIG REQUIRED QUIET)
+
+target_include_directories(${PLSSVM_BASE_LIBRARY_NAME} SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC $<LINK_ONLY:MKL::MKL> $<LINK_ONLY:MKL::MKL_SYCL>)

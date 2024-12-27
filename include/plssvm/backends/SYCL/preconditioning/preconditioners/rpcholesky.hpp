@@ -89,7 +89,7 @@ class rpcholesky_preconditioner_constructor {
 
 #ifndef RUNNING_GTEST
         plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
-                            "Randomly Pivoted Cholesky timings:\nRPCholesky time: {}.\nSVD (Eigen) time: {}.\n",
+                            "Randomly Pivoted Cholesky timings:\nRPCholesky time: {}.\nSVD time: {}.\n",
                             rpcholesky_time,
                             svd_time);
 #endif

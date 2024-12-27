@@ -42,6 +42,7 @@ if (AdaptiveCpp_FOUND)
         ${CMAKE_CURRENT_LIST_DIR}/detail/device_ptr.cpp
         ${CMAKE_CURRENT_LIST_DIR}/detail/pinned_memory.cpp
         ${CMAKE_CURRENT_LIST_DIR}/detail/utility.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/linalg/svd.cpp
         ${CMAKE_CURRENT_LIST_DIR}/csvm.cpp
     )
     
@@ -90,3 +91,23 @@ if (AdaptiveCpp_FOUND)
 else ()
     message(CHECK_FAIL "not found")
 endif ()
+
+# if compiling with AdaptiveCpp we use eigen to implement SVD
+# if eigen is included through FetchContent it will throw a lot of warnings during compilation
+# therefore it is recommended to make sure it is found
+message("Eigen3 is required when compiling with AdaptiveCpp")
+find_package(Eigen3 QUIET)
+if (Eigen3_FOUND)
+    message(STATUS "Found Eigen3")
+    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC Eigen3::Eigen)
+else ()
+    message(STATUS "Couldn't find Eigen3. Fetching ...")
+    FetchContent_Declare(
+            eigen
+            GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+            GIT_TAG 3.4.0
+    )
+    FetchContent_MakeAvailable(eigen)
+    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC Eigen3::Eigen)
+endif ()
+

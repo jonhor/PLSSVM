@@ -3,6 +3,7 @@
 #pragma once
 
 #include "plssvm/backends/SYCL/detail/random.hpp"
+#include "plssvm/backends/SYCL/linalg/constants.hpp"
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/matrix.hpp"
 
