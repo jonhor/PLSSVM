@@ -21,10 +21,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<T> &A,
     const auto M = B.n_cols;
     const auto K = A.n_cols;
 
-    ::sycl::range<2> global_range(N, M);                   // total number of work items
-    ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);  // size of each work group
-    ::sycl::nd_range<2> nd_range(global_range, local_range);
-
+    auto nd_range = detail::get_uniform_2d_range(N, M, BLOCK_SIZE);
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 2> A_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> B_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
@@ -75,10 +72,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
     const auto N = A.n_rows;
     const auto M = B.n_cols;
 
-    ::sycl::range<2> global_range(N, M);                   // total number of work items
-    ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);  // size of each work group
-    ::sycl::nd_range<2> nd_range(global_range, local_range);
-
+    auto nd_range = detail::get_uniform_2d_range(N, M, BLOCK_SIZE);
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 1> diag_cache(::sycl::range<1>(BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> B_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);
@@ -89,7 +83,6 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
             const auto global_row = item.get_global_id(0);
             const auto global_col = item.get_global_id(1);
 
-            // There are problems without this code. I'm not sure why when all matrices are padded.
             if (global_row >= N || global_col >= M) {
                 return;
             }
@@ -125,10 +118,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
     const auto N = A.n_rows;
     const auto M = B.n_cols;
 
-    ::sycl::range<2> global_range(N, M);                   // total number of work items
-    ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);  // size of each work group
-    ::sycl::nd_range<2> nd_range(global_range, local_range);
-
+    auto nd_range = detail::get_uniform_2d_range(N, M, BLOCK_SIZE);
     auto event = queue.submit([&](::sycl::handler &cgh) {
         ::sycl::local_accessor<real_type, 1> diag_cache(::sycl::range<1>(BLOCK_SIZE), cgh);
         ::sycl::local_accessor<real_type, 2> A_cache(::sycl::range<2>(BLOCK_SIZE, BLOCK_SIZE), cgh);

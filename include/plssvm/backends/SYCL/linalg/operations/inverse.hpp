@@ -17,11 +17,13 @@ namespace plssvm::sycl::linalg {
 inline void invert(::sycl::queue &queue, matrix_view<matrix_type::diagonal> &D) {
     const auto n_elements = std::min(D.n_rows, D.n_cols);
 
-    ::sycl::nd_range<1> nd_range(::sycl::range(n_elements), ::sycl::range(BLOCK_SIZE * BLOCK_SIZE));
+    auto nd_range = detail::get_uniform_1d_range(n_elements, MAX_WORKGROUP_SIZE);
     auto event = queue.parallel_for<class invert_diagonal_matrix>(nd_range, [=](::sycl::nd_item<1> item) {
         const auto global_id = item.get_global_id();
 
-        D(global_id, global_id) = real_type{ 1 } / D(global_id, global_id);
+        if (global_id < n_elements) {
+            D(global_id, global_id) = real_type{ 1 } / D(global_id, global_id);
+        }
     });
     event.wait();
 }

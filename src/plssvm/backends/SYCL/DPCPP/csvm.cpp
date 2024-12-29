@@ -282,14 +282,6 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
     auto K = matrix_view<matrix_type::symmetric>(data, order, order, PADDING_SIZE);
     auto &queue = device.impl->sycl_queue;
 
-    // {
-    //     auto sycl_device = queue.get_device();
-    //     fmt::println("==========");
-    //     fmt::println("{}", sycl_device.get_info<::sycl::info::device::max_work_group_size>());
-    //     fmt::println("==========");
-    // }
-
-
     switch (preconditioner_type) {
         case preconditioner_type::jacobi:
             {
@@ -320,7 +312,6 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
 
     plssvm::detail::unreachable();
 }
-
 
 void csvm::run_blas_level_3_kernel_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const ::plssvm::detail::execution_range &mirror_exec, const real_type alpha, const device_ptr_type &A_d, const device_ptr_type &B_d, const real_type beta, device_ptr_type &C_d) const {
     const std::size_t num_rhs = B_d.shape().x;

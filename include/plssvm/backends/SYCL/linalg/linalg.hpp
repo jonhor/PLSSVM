@@ -20,7 +20,4 @@
 #include "plssvm/backends/SYCL/linalg/decompositions/rpcholesky.hpp"
 #include "plssvm/backends/SYCL/linalg/decompositions/svd.hpp"
 
-// other
-//#include "plssvm/backends/SYCL/linalg/utils.hpp"
-
 #endif  // PLSSVM_BACKENDS_SYCL_LINALG_LINALG_HPP_

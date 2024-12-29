@@ -3,6 +3,7 @@
 #pragma once
 
 #include "plssvm/backends/SYCL/detail/random.hpp"
+#include "plssvm/backends/SYCL/detail/utility.hpp"
 #include "plssvm/backends/SYCL/linalg/constants.hpp"
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/matrix.hpp"
@@ -104,10 +105,14 @@ template <matrix_type T>
     const auto n_elements = std::min(A.n_rows, A.n_cols);
 
     auto D = D_.view();
-    ::sycl::nd_range<1> nd_range(::sycl::range(n_elements), ::sycl::range(BLOCK_SIZE * BLOCK_SIZE));
+
+    auto nd_range = detail::get_uniform_1d_range(n_elements, MAX_WORKGROUP_SIZE);
     auto event = queue.parallel_for<class copy_diagonal_elements>(nd_range, [=](::sycl::nd_item<1> item) {
         const auto global_id = item.get_global_id();
-        D(global_id, global_id) = A(global_id, global_id);
+
+        if (global_id < n_elements) {
+            D(global_id, global_id) = A(global_id, global_id);
+        }
     });
     event.wait();
 
