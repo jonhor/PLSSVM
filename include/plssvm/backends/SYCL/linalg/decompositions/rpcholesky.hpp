@@ -2,6 +2,7 @@
 #define PLSSVM_BACKENDS_SYCL_LINALG_RPCHOLESKY_HPP_
 
 #include "plssvm/backends/SYCL/detail/random.hpp"
+#include "plssvm/backends/SYCL/detail/utility.hpp"
 #include "plssvm/backends/SYCL/linalg/constants.hpp"
 #include "plssvm/detail/assert.hpp"
 
@@ -19,7 +20,6 @@ class randomly_pivoted_cholesky {
   public:
     randomly_pivoted_cholesky(::sycl::queue &queue, const matrix_view<matrix_type::symmetric> &K, unsigned int k = 0) :
         queue_(queue),
-        nd_range_(::sycl::range<1>(K.n_rows), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE)),
         N_(K.n_rows),
         probabilities_{ ::sycl::range<1>(N_), ::sycl::property::no_init() },
         K_(K),
@@ -83,12 +83,16 @@ class randomly_pivoted_cholesky {
         queue_.copy<real_type>(D.data(), D_host.data(), N_);
         const auto diag_sum = std::reduce(D_host.begin(), D_host.end());
 
-        ::sycl::nd_range<1> nd_range{ ::sycl::range<1>(N_), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE) };
+        auto nd_range = detail::get_uniform_1d_range(N_, MAX_WORKGROUP_SIZE);
         auto event = queue_.submit([&](::sycl::handler &cgh) {
+            auto N = N_;
             auto probabilities = probabilities_.get_access<::sycl::access::mode::discard_write>(cgh);
             cgh.parallel_for<class rpcholesky_update_probabilities>(nd_range, [=](::sycl::nd_item<1> item) {
                 const auto global_id = item.get_global_id();
-                probabilities[global_id] = D(global_id, global_id) / diag_sum;
+
+                if (global_id < N) {
+                    probabilities[global_id] = D(global_id, global_id) / diag_sum;
+                }
             });
         });
         event.wait();
@@ -98,12 +102,15 @@ class randomly_pivoted_cholesky {
         // fmt::println("{} iteration", i);
 
         auto D = D_.view();
-        // TODO check if d is zero
+
+        auto nd_range = detail::get_uniform_1d_range(N_, MAX_WORKGROUP_SIZE);
+        // nd_range_(::sycl::range<1>(K.n_rows), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE)),
+        //  TODO check if d is zero
         auto event = queue_.submit([&](::sycl::handler &cgh) {
             const auto N = N_;
             const auto K = K_;
 
-            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range_, [=](::sycl::nd_item<1> item) {
+            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range, [=](::sycl::nd_item<1> item) {
                 // const auto global_id = item.get_global_id();
                 const auto global_id = item.get_global_id(0);
                 const auto d = D(row_idx, row_idx);
@@ -131,7 +138,6 @@ class randomly_pivoted_cholesky {
     }
 
     ::sycl::queue queue_;
-    ::sycl::nd_range<1> nd_range_;
 
     std::vector<std::size_t> pivots_{};
 

@@ -4,8 +4,8 @@
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 
 #include "sycl/sycl.hpp"
-#include "oneapi/mkl.hpp"
 
+#include "oneapi/mkl.hpp"
 #include <cstdint>
 
 namespace plssvm::sycl::linalg {
@@ -14,7 +14,7 @@ svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::general
     using namespace oneapi::mkl;
 
     // gesvd from oneMKL is only supported on CPU
-    ::sycl::queue cpu_queue { ::sycl::cpu_selector_v };
+    ::sycl::queue cpu_queue{ ::sycl::cpu_selector_v };
 
     // gesvd expects the matrix to be in column-major order
     auto AT = linalg::transposed(queue, A);
@@ -22,8 +22,7 @@ svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::general
     const auto n = static_cast<std::int64_t>(AT->n_cols);
     const auto p = static_cast<std::int64_t>(AT->padding);
 
-
-    auto U = linalg::empty<matrix_type::general>(queue, AT->n_rows, AT->n_cols, AT->padding);
+    auto UT = linalg::empty<matrix_type::general>(queue, AT->n_rows, AT->n_cols, AT->padding);
     auto d = std::min(AT->n_rows, AT->n_cols);
     auto S = linalg::empty<matrix_type::diagonal>(queue, d, d, AT->padding);
 
@@ -39,31 +38,16 @@ svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::general
     const auto ld_vt = m + p;
 
     // allocate scratchpad
-    auto scratchpad_size = lapack::gesvd_scratchpad_size<real_type>(queue,job_u,job_vt, m, n,ld_a, ld_u, ld_vt);
+    auto scratchpad_size = lapack::gesvd_scratchpad_size<real_type>(queue, job_u, job_vt, m, n, ld_a, ld_u, ld_vt);
     auto scratchpad = ::sycl::malloc_shared<real_type>(static_cast<std::size_t>(scratchpad_size), queue);
 
     // calculate thin SVD
-    auto event = lapack::gesvd(queue, job_u, job_vt, m, n, AT->data(), ld_a, S->data(), U->data(), ld_u, nullptr, ld_vt, scratchpad, scratchpad_size);
+    auto event = lapack::gesvd(cpu_queue, job_u, job_vt, m, n, AT->data(), ld_a, S->data(), UT->data(), ld_u, nullptr, ld_vt, scratchpad, scratchpad_size);
     event.wait();
 
-//    std::cout << "== S ==\n";
-//    for (auto i = 0; i < std::min(m, n); ++i) {
-//        std::cout << S[i] << " ";
-//    }
-//    std::cout << std::endl;
-
-    // we can write U back such that we transpose it back? does it even matter because we need the transpose anyway
-    // so we calculate U.T here directly?
-//    std::cout << "== U ==\n";
-//    for (auto i = 0; i < m; ++i) {
-//        for (auto j = 0; j < std::min(m, n); ++j) {
-//            std::cout << U[i + j * m] << " "; // this is basically the "transposed" write back, e.g. taking the column-major order into consideration.
-//        }
-//        std::cout << '\n';
-//    }
-//    std::cout << std::endl;
+    auto U = linalg::transposed(queue, UT);
 
     return std::make_tuple(std::move(U), std::move(S));
 }
 
-}
+}  // namespace plssvm::sycl::linalg

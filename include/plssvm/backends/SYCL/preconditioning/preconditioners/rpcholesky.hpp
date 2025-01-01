@@ -2,6 +2,8 @@
 #define PLSSVM_BACKENDS_SYCL_PRECONDITIONING_PRECONDITIONERS_RPCHOLESKY_HPP_
 #pragma once
 
+#include "plssvm/backends/SYCL/detail/utility.hpp"
+#include "plssvm/backends/SYCL/linalg/constants.hpp"
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/backends/SYCL/preconditioning/sycl_preconditioner.hpp"
 
@@ -16,8 +18,8 @@ using linalg::matrix, linalg::matrix_type;
 namespace internal {
 void transform_sigma(::sycl::queue &queue, matrix_view<matrix_type::diagonal> &S, real_type c) {
     const auto N = std::min(S.n_rows, S.n_cols);
-    ::sycl::nd_range nd_range{ ::sycl::range(N), ::sycl::range(linalg::BLOCK_SIZE * linalg::BLOCK_SIZE) };
 
+    auto nd_range = detail::get_uniform_1d_range(N, linalg::MAX_WORKGROUP_SIZE);
     auto event = queue.parallel_for<class transform_sigma>(nd_range, [=](const ::sycl::nd_item<1> &item) {
         const auto global_idx = item.get_global_id();
 
@@ -81,6 +83,7 @@ class rpcholesky_preconditioner_constructor {
         auto [U, S] = linalg::svd(queue_, F);
         end_time = std::chrono::steady_clock::now();
         auto svd_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
         internal::transform_sigma(queue_, S, c_);
 
         auto UT = linalg::transposed(queue_, U);

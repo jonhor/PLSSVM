@@ -126,10 +126,7 @@ template <matrix_type T>
     auto B_ = zeros<matrix_type::general>(queue, A.n_cols, A.n_rows, A.padding);
     auto B = B_.view();
 
-    ::sycl::range<2> global_range(A.n_rows, A.n_cols);
-    ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);
-    ::sycl::nd_range<2> nd_range(global_range, local_range);
-
+    auto nd_range = detail::get_uniform_2d_range(A.n_rows, A.n_cols, BLOCK_SIZE);
     auto event = queue.submit([&](::sycl::handler &cgh) {
         cgh.parallel_for<class general_transpose>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto global_row = item.get_global_id(0);
@@ -152,8 +149,7 @@ template <matrix_type T>
      * We partition the matrix U here as we would a general NxN matrix,
      * but in practice we only need to consider the number of blocks equal to the upper triangular part of U.
      */
-    ::sycl::nd_range nd_range{ ::sycl::range(U.n_rows, U.n_cols), ::sycl::range(BLOCK_SIZE, BLOCK_SIZE) };
-
+    auto nd_range = detail::get_uniform_2d_range(U.n_rows, U.n_cols, BLOCK_SIZE);
     auto event = queue.submit([&](::sycl::handler &cgh) {
         cgh.parallel_for<class upper_transpose>(nd_range, [=](::sycl::nd_item<2> item) {
             const auto global_row = item.get_global_id(0);

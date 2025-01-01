@@ -131,15 +131,13 @@ inline void triangular_solve_lower_gpu(::sycl::queue &queue, const matrix_view<m
         block::solve_triangular_lower(queue, A, B, offset, rows_to_solve, block_size);
 
         // update the rest of the blocks
+        ::sycl::range<2> local_range(block_size, block_size);
+        auto nd_range = detail::get_uniform_2d_range(remaining_rows, block_size, block_size);
         auto update_blocks = queue.submit([&](::sycl::handler &cgh) {
-            ::sycl::range<2> local_range(block_size, block_size);
-            ::sycl::range<2> global_range(remaining_rows, block_size);
-            ::sycl::nd_range<2> execution_range(global_range, local_range);
-
             ::sycl::local_accessor<real_type, 2> a_cache(local_range, cgh);  // diagonal block from A that is multiplied with this block
             ::sycl::local_accessor<real_type, 2> b_cache(local_range, cgh);  // block from B that was last solved
 
-            cgh.parallel_for<class trsm_lower_update_blocks>(execution_range, [=](::sycl::nd_item<2> item) {
+            cgh.parallel_for<class trsm_lower_update_blocks>(nd_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 auto global_row = item.get_global_id(0) + offset + block_size;
@@ -189,15 +187,13 @@ inline void triangular_solve_upper_gpu(::sycl::queue &queue, const matrix_view<m
         }
 
         // update the rest of the blocks
+        ::sycl::range<2> local_range(block_size, block_size);
+        auto nd_range = detail::get_uniform_2d_range(offset, block_size, block_size);
         auto update_blocks = queue.submit([&](::sycl::handler &cgh) {
-            ::sycl::range<2> local_range(block_size, block_size);
-            ::sycl::range<2> global_range(offset, block_size);
-            ::sycl::nd_range<2> execution_range(global_range, local_range);
-
             ::sycl::local_accessor<real_type, 2> a_cache(local_range, cgh);  // diagonal block from A that is multiplied with this block
             ::sycl::local_accessor<real_type, 2> b_cache(local_range, cgh);  // block from B that was last solved
 
-            cgh.parallel_for<class trsm_upper_update_blocks>(execution_range, [=](::sycl::nd_item<2> item) {
+            cgh.parallel_for<class trsm_upper_update_blocks>(nd_range, [=](::sycl::nd_item<2> item) {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
                 auto global_row = item.get_global_id(0);

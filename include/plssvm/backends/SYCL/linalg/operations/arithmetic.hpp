@@ -173,7 +173,7 @@ inline void matrix_addition(::sycl::queue &queue, matrix_view<matrix_type::gener
     const auto N = A.n_rows;
     const auto M = A.n_cols;
 
-    ::sycl::nd_range nd_range{ ::sycl::range(N, M), ::sycl::range(BLOCK_SIZE, BLOCK_SIZE) };
+    auto nd_range = detail::get_uniform_2d_range(N, M, BLOCK_SIZE);
     auto event = queue.parallel_for<class matrix_addition>(nd_range, [=](::sycl::nd_item<2> item) {
         const auto global_row = item.get_global_id(0);
         const auto global_col = item.get_global_id(1);
