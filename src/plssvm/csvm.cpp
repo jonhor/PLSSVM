@@ -91,44 +91,21 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
     std::vector<real_type> delta = rowwise_dot(R, D);
     const std::vector<real_type> delta0(delta);
 
-    // get the index of the rhs that has the largest residual difference wrt to its target residual
-    const auto rhs_idx_max_residual_difference = [&]() {
-        const real_type max_difference{ 0.0 };
-        std::size_t idx{ 0 };
-        for (std::size_t i = 0; i < delta.size(); ++i) {
-            const real_type difference = delta[i] - (eps * eps * delta0[i]);
-            if (difference > max_difference) {
-                idx = i;
-            }
-        }
-        return idx;
+    const auto squared_norm = [](const std::vector<real_type> &v) {
+        return std::inner_product(v.cbegin(), v.cend(), v.cbegin(), double{ 0 });
     };
-    // get the number of rhs that have already been converged
-    const auto num_rhs_converged = [eps, &delta, &delta0]() {
-        return static_cast<std::size_t>(std::inner_product(delta.cbegin(), delta.cend(), delta0.cbegin(), real_type{ 0.0 }, std::plus<>{}, [eps](const real_type d, const real_type d0) { return d <= eps * eps * d0; }));
-    };
-    // calculate a mask for every converged right hand side
-    // -> 0 if the rhs already converged, 1 otherwise
-    const auto calculate_rhs_converged_mask = [eps, &delta, &delta0]() {
-        std::vector<int> mask(delta.size());
-        for (std::size_t i = 0; i < mask.size(); ++i) {
-            mask[i] = delta[i] <= eps * eps * delta0[i] ? 0 : 1;
-        }
-        return mask;
-    };
+    auto delta0_norm = squared_norm(delta0);
+    double target_norm = eps * eps * delta0_norm;
 
     unsigned long long iter = 0;
-    while (iter < max_cg_iter && num_rhs_converged() < num_rhs) {
-        const std::size_t max_residual_difference_idx = rhs_idx_max_residual_difference();
+    double residual_norm = delta0_norm;
+    while (residual_norm > target_norm && iter < max_cg_iter) {
         detail::log(verbosity_level::full | verbosity_level::timing,
-                    "Start Iteration {} (max: {}) with {}/{} converged rhs (max residual {} with target residual {} for rhs {}). ",
+                    "Start Iteration {} (max: {}) residual norm: {} with target norm: {}. ",
                     iter + 1,
                     max_cg_iter,
-                    num_rhs_converged(),
-                    num_rhs,
-                    delta[max_residual_difference_idx],
-                    eps * eps * delta0[max_residual_difference_idx],
-                    max_residual_difference_idx);
+                    residual_norm,
+                    target_norm);
         const std::chrono::steady_clock::time_point iteration_start_time = std::chrono::steady_clock::now();
 
         // Q = A * D
@@ -142,30 +119,7 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
         // alpha = delta_new / (D^T * Q))
         const std::vector<real_type> alpha = delta / rowwise_dot(D, Q);
 
-        // create mask for the residual -> only update X if the respective rhs did not already converge
-        std::vector<int> mask = calculate_rhs_converged_mask();
-        // update mask -> can't update X if the residual is already 0
-#pragma omp parallel for shared(R, mask)
-        for (std::size_t row = 0; row < R.num_rows(); ++row) {
-            // if mask[row] == 0 -> rhs already converged -> X wouldn't be updated either way
-            if (mask[row] == 1) {
-                // check if any residual value is not zero
-                bool is_residual_zero = true;
-                for (std::size_t col = 0; col < R.num_cols(); ++col) {
-                    if (R(row, col) != real_type{ 0.0 }) {
-                        is_residual_zero = false;
-                        break;
-                    }
-                }
-                // all residual values are 0 -> residual is 0 -> can't updated X for this rhs!
-                if (is_residual_zero) {
-                    mask[row] = 0;
-                }
-            }
-        }
-
-        // X = X + alpha * D
-        X += masked_rowwise_scale(mask, alpha, D);
+        X += rowwise_scale(alpha, D);
 
         if (iter % 50 == 49) {
             // explicitly recalculate residual to remove accumulating floating point errors
@@ -209,19 +163,16 @@ std::pair<soa_matrix<real_type>, unsigned long long> csvm::conjugate_gradients(c
         total_iteration_time += iteration_duration;
 
         // next CG iteration
+        residual_norm = squared_norm(delta);
         ++iter;
     }
 
-    const std::size_t max_residual_difference_idx = rhs_idx_max_residual_difference();
     detail::log(verbosity_level::full | verbosity_level::timing,
-                "Finished after {}/{} iterations with {}/{} converged rhs (max residual {} with target residual {} for rhs {}) and an average iteration time of {} and an average SYMM time of {}.\n",
+                "Finished after {}/{} iterations with: {}/{} and an average iteration time of {} and an average SYMM time of {}.\n",
                 detail::tracking_entry{ "cg", "iterations", iter },
                 detail::tracking_entry{ "cg", "max_iterations", max_cg_iter },
-                detail::tracking_entry{ "cg", "num_converged_rhs", num_rhs_converged() },
-                detail::tracking_entry{ "cg", "num_rhs", num_rhs },
-                delta[max_residual_difference_idx],
-                eps * eps * delta0[max_residual_difference_idx],
-                max_residual_difference_idx,
+                residual_norm,
+                target_norm,
                 detail::tracking_entry{ "cg", "avg_iteration_time", total_iteration_time / std::max(iter, 1ULL) },
                 detail::tracking_entry{ "cg", "avg_blas_level_3_time", total_blas_level_3_time / (1 + iter + iter / 50) });
     if (P.has_value()) {
