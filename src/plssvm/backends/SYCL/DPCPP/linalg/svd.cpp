@@ -18,12 +18,12 @@ svd_return_type svd(::sycl::queue &queue, const matrix_view<matrix_type::general
 
     // gesvd expects the matrix to be in column-major order
     auto AT = linalg::transposed(queue, A);
-    const auto m = static_cast<std::int64_t>(AT->n_rows);
-    const auto n = static_cast<std::int64_t>(AT->n_cols);
-    const auto p = static_cast<std::int64_t>(AT->padding);
+    const auto m = static_cast<std::int64_t>(A.n_rows);
+    const auto n = static_cast<std::int64_t>(A.n_cols);
+    const auto p = static_cast<std::int64_t>(A.padding);
 
     auto UT = linalg::empty<matrix_type::general>(queue, AT->n_rows, AT->n_cols, AT->padding);
-    auto d = std::min(AT->n_rows, AT->n_cols);
+    auto d = static_cast<std::size_t>(std::min(m, n));
     auto S = linalg::empty<matrix_type::diagonal>(queue, d, d, AT->padding);
 
     // calculate U as thin SVD
