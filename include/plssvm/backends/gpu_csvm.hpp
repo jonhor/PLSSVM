@@ -108,7 +108,7 @@ class gpu_csvm : public ::plssvm::csvm {
     /**
      * @copydoc plssvm::csvm::assemble_precondition_matrix
      */
-    [[nodiscard]] std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner, const std::vector<::plssvm::detail::move_only_any> &K) const final;
+    [[nodiscard]] std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner, const std::vector<::plssvm::detail::move_only_any> &K, const parameter &params) const final;
 
     /**
      * @copydoc plssvm::csvm::blas_level_3
@@ -154,7 +154,7 @@ class gpu_csvm : public ::plssvm::csvm {
      */
     [[nodiscard]] virtual device_ptr_type run_assemble_kernel_matrix_explicit(std::size_t device_id, const execution_range &exec, const parameter &params, const device_ptr_type &data_d, const device_ptr_type &q_red_d, real_type QA_cost) const = 0;
 
-    [[nodiscard]] virtual std::unique_ptr<preconditioner> run_construct_preconditioner(std::size_t device_id, preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d) const = 0;
+    [[nodiscard]] virtual std::unique_ptr<preconditioner> run_construct_preconditioner(std::size_t device_id, preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d, const parameter &params) const = 0;
 
     /**
      * @brief Perform an explicit BLAS level 3 operation: `C = alpha * A * B + beta * C` where @p A, @p B, and @p C are matrices, and @p alpha and @p beta are scalars.
@@ -320,13 +320,13 @@ std::vector<::plssvm::detail::move_only_any> gpu_csvm<device_ptr_t, queue_t, pin
 }
 
 template <template <typename> typename device_ptr_t, typename queue_t, template <typename> typename pinned_memory_t>
-std::unique_ptr<preconditioner> gpu_csvm<device_ptr_t, queue_t, pinned_memory_t>::construct_preconditioner(const preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K) const {
+std::unique_ptr<preconditioner> gpu_csvm<device_ptr_t, queue_t, pinned_memory_t>::construct_preconditioner(const preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K, const parameter &params) const {
     PLSSVM_ASSERT(K.size() == 1, "Preconditioning only works in single device mode for now");
     constexpr std::size_t device_id = 0;
 
     const auto &kernel_matrix_d = detail::move_only_any_cast<const device_ptr_type &>(K[0]);
     // std::pair<device_ptr_type, preconditioner_func> preconditioner_components = this->run_construct_preconditioner(device_id, preconditioner, kernel_matrix_d);
-    auto P = this->run_construct_preconditioner(device_id, preconditioner_type, kernel_matrix_d);
+    auto P = this->run_construct_preconditioner(device_id, preconditioner_type, kernel_matrix_d, params);
 
     std::vector<detail::move_only_any> precondition_matrices_parts(1);
     // precondition_matrices_parts[0] = detail::move_only_any{ std::move(preconditioner_components.first) };

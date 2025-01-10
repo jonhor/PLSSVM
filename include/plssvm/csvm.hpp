@@ -231,7 +231,7 @@ class csvm {
      * @param K TODO
      * @return TODO
      */
-    [[nodiscard]] virtual std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K) const = 0;
+    [[nodiscard]] virtual std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K, const parameter &params) const = 0;
 
     /**
      * @brief Perform a BLAS level 3 matrix-matrix multiplication: `C = alpha * A * B + beta * C`.
@@ -946,7 +946,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
     if (used_preconditioner != preconditioner_type::none) {
         const std::chrono::steady_clock::time_point precondition_assembly_start_time = std::chrono::steady_clock::now();
 
-        P = this->construct_preconditioner(used_preconditioner, kernel_matrix);
+        P = this->construct_preconditioner(used_preconditioner, kernel_matrix, params);
 
         const std::chrono::steady_clock::time_point precondition_assembly_end_time = std::chrono::steady_clock::now();
         const auto precondition_assembly_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precondition_assembly_end_time - precondition_assembly_start_time);

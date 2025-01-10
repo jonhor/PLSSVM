@@ -277,7 +277,7 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
     return kernel_matrix_d;
 }
 
-auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d) const -> std::unique_ptr<preconditioner> {
+auto csvm::run_construct_preconditioner(const std::size_t device_id, const preconditioner_type preconditioner_type, const device_ptr_type &kernel_matrix_d, const parameter &params) const -> std::unique_ptr<preconditioner> {
     using namespace plssvm::sycl;
 
     PLSSVM_ASSERT(!kernel_matrix_d.is_padded(), "Kernel matrix in triangular form shouldn't be padded");
@@ -294,6 +294,7 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
 
     auto K = matrix_view<matrix_type::symmetric>(data, order, order, PADDING_SIZE);
     auto &queue = device.impl->sycl_queue;
+
     switch (preconditioner_type) {
         case preconditioner_type::jacobi:
             {
@@ -307,8 +308,7 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
             }
         case preconditioner_type::rpcholesky:
             {
-                // TODO pass cost_factor here instead of 1
-                auto construct_rpcholesky_preconditioner = preconditioning::rpcholesky_preconditioner_constructor{ queue, K, real_type{ 1 } };
+                auto construct_rpcholesky_preconditioner = preconditioning::rpcholesky_preconditioner_constructor{ queue, K, params.cost };
                 return std::make_unique<preconditioning::rpcholesky_preconditioner>(construct_rpcholesky_preconditioner());
             }
         case preconditioner_type::dummy:
