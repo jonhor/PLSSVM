@@ -289,7 +289,7 @@ class csvm {
      * @param[in] cg_solver the variation of the CG algorithm to use, i.e., how the kernel matrix is assembled (currently: explicit, streaming, implicit)
      * @return the result matrix `X` and the number of CG iterations necessary for each right-hand side to converge (`[[nodiscard]]`)
      */
-    [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::unique_ptr<preconditioner>> &P, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
+    [[nodiscard]] std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::unique_ptr<preconditioner>> &P, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
     /**
      * @brief Perform a dimensional reduction for the kernel matrix.
      * @details Reduces the resulting dimension by `2` compared to the original LS-SVM formulation.
@@ -1004,8 +1004,8 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned l
 
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
-    unsigned long long num_iter;
-    std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, P, used_epsilon, used_max_iter, used_solver);
+    std::vector<unsigned long long> num_iters{};
+    std::tie(X, num_iters) = this->conjugate_gradients(kernel_matrix, B_red, P, used_epsilon, used_max_iter, used_solver);
 
     // calculate bias and undo dimensional reduction
     aos_matrix<real_type> X_ret{ shape{ num_rhs, A.num_rows() }, shape{ PADDING_SIZE, PADDING_SIZE } };
@@ -1025,8 +1025,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned l
         X_ret(i, num_rows_reduced) = -temp_sum;
     }
 
-    std::vector<unsigned long long> placeholder{};
-    return std::make_tuple(std::move(X_ret), std::move(bias), placeholder);
+    return std::make_tuple(std::move(X_ret), std::move(bias), num_iters);
 }
 
 /// @cond Doxygen_suppress
