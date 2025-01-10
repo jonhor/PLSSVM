@@ -13,34 +13,34 @@
 #define PLSSVM_CSVM_HPP_
 #pragma once
 
-#include "plssvm/classification_types.hpp"        // plssvm::classification_type, plssvm::classification_type_to_full_string
-#include "plssvm/constants.hpp"                   // plssvm::real_type, plssvm::PADDING_SIZE
-#include "plssvm/data_set.hpp"                    // plssvm::data_set
-#include "plssvm/detail/assert.hpp"               // PLSSVM_ASSERT
-#include "plssvm/detail/data_distribution.hpp"    // plssvm::detail::triangular_data_distribution
-#include "plssvm/detail/data_distribution.hpp"    // plssvm::detail::data_distribution
-#include "plssvm/detail/igor_utility.hpp"         // plssvm::detail::{get_value_from_named_parameter, has_only_parameter_named_args_v}
-#include "plssvm/detail/logging.hpp"              // plssvm::detail::log
-#include "plssvm/detail/memory_size.hpp"          // plssvm::detail::memory_size
-#include "plssvm/detail/move_only_any.hpp"        // plssvm::detail::move_only_any
-#include "plssvm/detail/performance_tracker.hpp"  // plssvm::detail::performance_tracker
-#include "plssvm/detail/type_traits.hpp"          // PLSSVM_REQUIRES, plssvm::detail::remove_cvref_t
-#include "plssvm/detail/utility.hpp"              // plssvm::detail::to_underlying
-#include "plssvm/exceptions/exceptions.hpp"       // plssvm::invalid_parameter_exception
-#include "plssvm/gamma.hpp"                       // plssvm::gamma_type, plssvm::calculate_gamma_value
-#include "plssvm/kernel_function_types.hpp"       // plssvm::kernel_function_type
-#include "plssvm/matrix.hpp"                      // plssvm::aos_matrix
-#include "plssvm/model.hpp"                       // plssvm::model
-#include "plssvm/parameter.hpp"                   // plssvm::parameter
-#include "plssvm/preconditioner.hpp"              // plssvm::preconditioner
-#include "plssvm/preconditioner_types.hpp"        // plssvm::preconditioner_type
-#include "plssvm/shape.hpp"                       // plssvm::shape
-#include "plssvm/solver_types.hpp"                // plssvm::solver_type
-#include "plssvm/target_platforms.hpp"            // plssvm::target_platform
-#include "plssvm/verbosity_levels.hpp"            // plssvm::verbosity_level
+#include "plssvm/classification_types.hpp"                 // plssvm::classification_type, plssvm::classification_type_to_full_string
+#include "plssvm/constants.hpp"                            // plssvm::real_type, plssvm::PADDING_SIZE
+#include "plssvm/data_set.hpp"                             // plssvm::data_set
+#include "plssvm/detail/assert.hpp"                        // PLSSVM_ASSERT
+#include "plssvm/detail/data_distribution.hpp"             // plssvm::detail::triangular_data_distribution
+#include "plssvm/detail/data_distribution.hpp"             // plssvm::detail::data_distribution
+#include "plssvm/detail/igor_utility.hpp"                  // plssvm::detail::{get_value_from_named_parameter, has_only_parameter_named_args_v}
+#include "plssvm/detail/logging.hpp"                       // plssvm::detail::log
+#include "plssvm/detail/memory_size.hpp"                   // plssvm::detail::memory_size
+#include "plssvm/detail/move_only_any.hpp"                 // plssvm::detail::move_only_any
+#include "plssvm/detail/tracking/performance_tracker.hpp"  // PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT, plssvm::detail::tracking::tracking_entry
+#include "plssvm/detail/type_traits.hpp"                   // PLSSVM_REQUIRES, plssvm::detail::remove_cvref_t
+#include "plssvm/detail/utility.hpp"                       // plssvm::detail::to_underlying
+#include "plssvm/exceptions/exceptions.hpp"                // plssvm::invalid_parameter_exception
+#include "plssvm/gamma.hpp"                                // plssvm::gamma_type, plssvm::calculate_gamma_value
+#include "plssvm/kernel_function_types.hpp"                // plssvm::kernel_function_type
+#include "plssvm/matrix.hpp"                               // plssvm::aos_matrix
+#include "plssvm/model.hpp"                                // plssvm::model
+#include "plssvm/parameter.hpp"                            // plssvm::parameter
+#include "plssvm/preconditioner.hpp"                       // plssvm::preconditioner
+#include "plssvm/preconditioner_types.hpp"                 // plssvm::preconditioner_type
+#include "plssvm/shape.hpp"                                // plssvm::shape
+#include "plssvm/solver_types.hpp"                         // plssvm::solver_type
+#include "plssvm/target_platforms.hpp"                     // plssvm::target_platform
+#include "plssvm/verbosity_levels.hpp"                     // plssvm::verbosity_level
 
 #include "fmt/color.h"    // fmt::fg, fmt::color::orange
-#include "fmt/core.h"     // fmt::format
+#include "fmt/format.h"   // fmt::format
 #include "igor/igor.hpp"  // igor::parser
 
 #include <algorithm>    // std::max_element, std::all_of
@@ -48,6 +48,7 @@
 #include <cstddef>      // std::size_t
 #include <limits>       // std::numeric_limits::lowest
 #include <memory>       // std::unique_ptr
+#include <numeric>      // std::accumulate
 #include <optional>     // std::optional, std::make_optional, std::nullopt
 #include <ratio>        // std::milli
 #include <tuple>        // std::tie
@@ -225,12 +226,6 @@ class csvm {
      */
     [[nodiscard]] virtual std::vector<detail::move_only_any> assemble_kernel_matrix(solver_type solver, const parameter &params, const soa_matrix<real_type> &A, const std::vector<real_type> &q_red, real_type QA_cost) const = 0;
 
-    /**
-     * @brief TODO
-     * @param preconditioner_type TODO
-     * @param K TODO
-     * @return TODO
-     */
     [[nodiscard]] virtual std::unique_ptr<preconditioner> construct_preconditioner(preconditioner_type preconditioner_type, const std::vector<::plssvm::detail::move_only_any> &K, const parameter &params) const = 0;
 
     /**
@@ -280,10 +275,10 @@ class csvm {
      * @param[in] B the right-hand sides
      * @param[in] params the parameter to create the kernel matrix
      * @param[in] named_args additional parameters for the respective algorithm used to solve the system of linear equations
-     * @return the result matrix `X`, the respective biases, and the number of iterations necessary to solve the system of linear equations (`[[nodiscard]]`)
+     * @return the result matrix `X`, the respective biases, and the number of iterations necessary for each right-hand side to converge (`[[nodiscard]]`)
      */
     template <typename... Args>
-    [[nodiscard]] std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> solve_lssvm_system_of_linear_equations(const soa_matrix<real_type> &A, const aos_matrix<real_type> &B, const parameter &params, Args &&...named_args) const;
+    [[nodiscard]] std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned long long>> solve_lssvm_system_of_linear_equations(const soa_matrix<real_type> &A, const aos_matrix<real_type> &B, const parameter &params, Args &&...named_args) const;
     /**
      * @brief Solve the system of linear equations `AX = B` where `A` is the kernel matrix using the Conjugate Gradients (CG) algorithm.
      * @param[in] A the kernel matrix; potentially distributed across multiple devices
@@ -292,7 +287,7 @@ class csvm {
      * @param[in] eps the termination criterion for the CG algorithm
      * @param[in] max_cg_iter the maximum number of CG iterations
      * @param[in] cg_solver the variation of the CG algorithm to use, i.e., how the kernel matrix is assembled (currently: explicit, streaming, implicit)
-     * @return the result matrix `X` and the number of CG iterations necessary to solve the system of linear equations (`[[nodiscard]]`)
+     * @return the result matrix `X` and the number of CG iterations necessary for each right-hand side to converge (`[[nodiscard]]`)
      */
     [[nodiscard]] std::pair<soa_matrix<real_type>, unsigned long long> conjugate_gradients(const std::vector<detail::move_only_any> &A, const soa_matrix<real_type> &B, const std::optional<std::unique_ptr<preconditioner>> &P, real_type eps, unsigned long long max_cg_iter, solver_type cg_solver) const;
     /**
@@ -351,7 +346,7 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
                   "The provided matrix must be padded with {}, but is padded with {}!",
                   shape{ PADDING_SIZE, PADDING_SIZE },
                   data.data().padding());
-#if defined(PLSSVM_ASSERT_ENABLED)
+#if defined(PLSSVM_ENABLE_ASSERTS)
     if (params_.kernel_type == kernel_function_type::chi_squared) {
         PLSSVM_ASSERT(std::all_of(data.data().data(), data.data().data() + data.data().size_padded(), [](const real_type val) { return val >= real_type{ 0.0 }; }),
                       "The chi-squared kernel is only well defined for non-negative values!");
@@ -361,6 +356,8 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
     if (!data.has_labels()) {
         throw invalid_parameter_exception{ "No labels given for training! Maybe the data is only usable for prediction?" };
     }
+
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT("fit start");
 
     igor::parser parser{ named_args... };
 
@@ -403,10 +400,8 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
         // use the one vs. all multi-class classification strategy
         // solve the minimization problem
         aos_matrix<real_type> alpha{};
-        unsigned long long num_iter{};
-        std::tie(alpha, *csvm_model.rho_ptr_, num_iter) = solve_lssvm_system_of_linear_equations(*data.data_ptr_, *data.y_ptr_, params, std::forward<Args>(named_args)...);
+        std::tie(alpha, *csvm_model.rho_ptr_, num_iters) = solve_lssvm_system_of_linear_equations(*data.data_ptr_, *data.y_ptr_, params, std::forward<Args>(named_args)...);
         csvm_model.alpha_ptr_->push_back(std::move(alpha));
-        num_iters.resize(calculate_number_of_classifiers(used_classification, data.num_classes()), num_iter);
     } else if (used_classification == plssvm::classification_type::oao) {
         // use the one vs. one multi-class classification strategy
         const std::size_t num_classes = data.num_classes();
@@ -443,7 +438,7 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
             const auto &[alpha, rho, num_iter] = solve_lssvm_system_of_linear_equations(*data.data_ptr_, reduced_y, params, std::forward<Args>(named_args)...);
             csvm_model.alpha_ptr_->front() = std::move(alpha);
             csvm_model.rho_ptr_->front() = rho.front();  // prevents std::tie
-            num_iters.push_back(num_iter);
+            num_iters.push_back(num_iter.front());
         } else {
             // perform one vs. one classification
             std::size_t pos = 0;
@@ -481,7 +476,7 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
                     const auto &[alpha, rho, num_iter] = solve_lssvm_system_of_linear_equations(binary_data, binary_y, params, std::forward<Args>(named_args)...);
                     (*csvm_model.alpha_ptr_)[pos] = std::move(alpha);
                     (*csvm_model.rho_ptr_)[pos] = rho.front();  // prevents std::tie
-                    num_iters.push_back(num_iter);
+                    num_iters.push_back(num_iter.front());
                     // go to next one vs. one classification
                     ++pos;
                     // order of the alpha value: 0 vs 1, 0 vs 2, 0 vs 3, 1 vs 2, 1 vs 3, 2 vs 3
@@ -499,7 +494,9 @@ model<label_type> csvm::fit(const data_set<label_type> &data, Args &&...named_ar
     detail::log(verbosity_level::full | verbosity_level::timing,
                 "\nLearned the SVM classifier for {} multi-class classification in {}.\n\n",
                 classification_type_to_full_string(used_classification),
-                detail::tracking_entry{ "cg", "total_runtime", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
+                detail::tracking::tracking_entry{ "cg", "total_runtime", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
+
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT("fit end");
 
     return csvm_model;
 }
@@ -516,7 +513,7 @@ std::vector<label_type> csvm::predict(const model<label_type> &model, const data
                   "The provided predict points must be padded with {}, but is padded with {}!",
                   shape{ PADDING_SIZE, PADDING_SIZE },
                   data.data().padding());
-#if defined(PLSSVM_ASSERT_ENABLED)
+#if defined(PLSSVM_ENABLE_ASSERTS)
     if (params_.kernel_type == kernel_function_type::chi_squared) {
         PLSSVM_ASSERT(std::all_of(data.data().data(), data.data().data() + data.data().size_padded(), [](const real_type val) { return val >= real_type{ 0.0 }; }),
                       "The chi-squared kernel is only well defined for non-negative values!");
@@ -526,6 +523,8 @@ std::vector<label_type> csvm::predict(const model<label_type> &model, const data
     if (model.num_features() != data.num_features()) {
         throw invalid_parameter_exception{ fmt::format("Number of features per data point ({}) must match the number of features per support vector of the provided model ({})!", data.num_features(), model.num_features()) };
     }
+
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT("predict start");
 
     // convert predicted values to the correct labels
     std::vector<label_type> predicted_labels(data.num_data_points());
@@ -581,7 +580,7 @@ std::vector<label_type> csvm::predict(const model<label_type> &model, const data
             // w is currently empty
             // initialize the w matrix and calculate it later!
             calculate_w = true;
-            (*model.w_ptr_) = soa_matrix<real_type>{ shape{ calculate_number_of_classifiers(classification_type::oao, num_classes), num_features } };
+            (*model.w_ptr_) = soa_matrix<real_type>{ shape{ calculate_number_of_classifiers(classification_type::oao, num_classes), num_features }, shape{ PADDING_SIZE, PADDING_SIZE } };
         }
 
         // perform one vs. one prediction
@@ -626,7 +625,9 @@ std::vector<label_type> csvm::predict(const model<label_type> &model, const data
                     binary_votes = this->run_predict_values(model.params_, binary_sv, binary_alpha, binary_rho, w, predict_points);
                     // only in case of the linear kernel, the w vector gets filled -> store it
                     if (params_.kernel_type == kernel_function_type::linear) {
-#pragma omp parallel for default(none) shared(model, w) firstprivate(num_features, pos)
+#if !defined(PLSSVM_STDPAR_BACKEND_HAS_NVHPC)
+    #pragma omp parallel for default(none) shared(model, w) firstprivate(num_features, pos)
+#endif
                         for (std::size_t dim = 0; dim < num_features; ++dim) {
                             (*model.w_ptr_)(pos, dim) = w(0, dim);
                         }
@@ -674,6 +675,8 @@ std::vector<label_type> csvm::predict(const model<label_type> &model, const data
         }
     }
 
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT("predict end");
+
     return predicted_labels;
 }
 
@@ -714,7 +717,7 @@ real_type csvm::score(const model<label_type> &model, const data_set<label_type>
 //*************************************************************************************************************************************//
 
 template <typename... Args>
-std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> csvm::solve_lssvm_system_of_linear_equations(const soa_matrix<real_type> &A, const aos_matrix<real_type> &B, const parameter &params, Args &&...named_args) const {
+std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned long long>> csvm::solve_lssvm_system_of_linear_equations(const soa_matrix<real_type> &A, const aos_matrix<real_type> &B, const parameter &params, Args &&...named_args) const {
     PLSSVM_ASSERT(!A.empty(), "The A matrix must not be empty!");
     PLSSVM_ASSERT(A.is_padded(), "The A matrix must be padded!");
     PLSSVM_ASSERT((A.padding() == shape{ PADDING_SIZE, PADDING_SIZE }),
@@ -728,10 +731,12 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
 
     // set default values
     // note: if the default values are changed, they must also be changed in the Python bindings!
-    auto used_epsilon = static_cast<plssvm::real_type>(1e-03);
+    auto used_epsilon{ plssvm::real_type{ 0.001 } };
     unsigned long long used_max_iter{ A.num_rows() - 1 };  // account for later dimensional reduction
     solver_type used_solver{ solver_type::automatic };
+
     preconditioner_type used_preconditioner{ preconditioner_type::none };
+    used_preconditioner = detail::get_value_from_named_parameter<preconditioner_type>(parser, selected_preconditioner);
 
     // compile time check: only named parameters are permitted
     static_assert(!parser.has_unnamed_arguments(), "Can only use named parameter!");
@@ -756,10 +761,6 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         if (used_max_iter == 0) {
             throw invalid_parameter_exception{ fmt::format("max_iter must be greater than 0, but is {}!", used_max_iter) };
         }
-    }
-    if constexpr (parser.has(selected_preconditioner)) {
-        // get the value of the provided parameter
-        used_preconditioner = detail::get_value_from_named_parameter<preconditioner_type>(parser, selected_preconditioner);
     }
     if constexpr (parser.has(solver)) {
         // get the value of the provided parameter
@@ -799,6 +800,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         // calculate the maximum total memory needed for the explicit and implicit kernel matrix per device
         const detail::triangular_data_distribution data_distribution{ num_rows_reduced, this->num_available_devices() };
         const std::vector<detail::memory_size> total_memory_needed_explicit_per_device = data_distribution.calculate_maximum_explicit_kernel_matrix_memory_needed_per_place(num_features, num_rhs);
+        const std::pair<detail::memory_size, std::vector<detail::memory_size>> total_memory_needed_streaming_per_device = data_distribution.calculate_maximum_streaming_kernel_matrix_memory_needed_per_place(num_features, num_rhs);
         const std::vector<detail::memory_size> total_memory_needed_implicit_per_device = data_distribution.calculate_maximum_implicit_kernel_matrix_memory_needed_per_place(num_features, num_rhs);
 
         // format a vector differentiating between it containing only a single entry or multiple
@@ -818,19 +820,24 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
                     "  - total device memory: {4}\n"
                     "  - usable device memory (with safety margin of min({0} %, {1}): {5}\n"
                     "  - maximum memory needed (cg_explicit): {6}\n"
-                    "  - maximum memory needed (cg_implicit): {7}\n",
-                    percentual_safety_margin * 100.0L,
+                    "  - maximum memory needed (cg_streaming): {7} (device) + {8} (system total)\n"
+                    "  - maximum memory needed (cg_implicit): {9}\n",
+                    static_cast<double>(percentual_safety_margin * 100.0L),
                     minimal_safety_margin,
-                    detail::tracking_entry{ "solver", "system_memory", total_system_memory },
-                    detail::tracking_entry{ "solver", "usable_system_memory_with_safety_margin", usable_system_memory },
+                    detail::tracking::tracking_entry{ "solver", "system_memory", total_system_memory },
+                    detail::tracking::tracking_entry{ "solver", "usable_system_memory_with_safety_margin", usable_system_memory },
                     format_vector(total_device_memory_per_device),
                     format_vector(usable_device_memory_per_device),
                     format_vector(total_memory_needed_explicit_per_device),
+                    format_vector(total_memory_needed_streaming_per_device.second),
+                    total_memory_needed_streaming_per_device.first,
                     format_vector(total_memory_needed_implicit_per_device));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "device_memory", total_device_memory_per_device }));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "usable_device_memory_with_safety_margin", usable_device_memory_per_device }));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "needed_device_memory_cg_explicit", total_memory_needed_explicit_per_device }));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "needed_device_memory_cg_implicit", total_memory_needed_implicit_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "device_memory", total_device_memory_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "usable_device_memory_with_safety_margin", usable_device_memory_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "needed_memory_cg_explicit", total_memory_needed_explicit_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "needed_system_memory_cg_streaming", total_memory_needed_streaming_per_device.first }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "needed_device_memory_cg_streaming", total_memory_needed_streaming_per_device.second }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "needed_memory_cg_implicit", total_memory_needed_implicit_per_device }));
 
         // helper function to check whether ALL devices fulfill the requested memory constraint for the specific solver type
         const auto check_sizes = [](const auto &needed_memory_per_device, const auto &memory_constraint) -> std::vector<std::size_t> {
@@ -852,13 +859,26 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         } else {
             detail::log(verbosity_level::full, "Cannot use cg_explicit due to memory constraints on device(s) {}!\n", format_vector(failed_cg_explicit_constraints));
 
-            // check whether there is enough memory available for cg_implicit
-            if (const std::vector<std::size_t> failed_cg_implicit_constraints = check_sizes(total_memory_needed_implicit_per_device, usable_device_memory_per_device); failed_cg_implicit_constraints.empty()) {
+            if (const std::vector<std::size_t> failed_cg_streaming_constraints = check_sizes(total_memory_needed_streaming_per_device.second, usable_device_memory_per_device);
+                total_memory_needed_streaming_per_device.first <= usable_system_memory && failed_cg_streaming_constraints.empty()) {
                 // use the implicit solver type
-                used_solver = solver_type::cg_implicit;
+                used_solver = solver_type::cg_streaming;
             } else {
-                // not enough device memory available for the implicit case
-                throw kernel_launch_resources{ fmt::format("Not enough device memory available on device(s) {} even for the cg_implicit solver!", format_vector(failed_cg_implicit_constraints)) };
+                if (!failed_cg_streaming_constraints.empty()) {
+                    detail::log(verbosity_level::full, "Cannot use cg_streaming due to memory constraints on device(s) {}!\n", format_vector(failed_cg_streaming_constraints));
+                }
+                if (total_memory_needed_streaming_per_device.first > usable_system_memory) {
+                    detail::log(verbosity_level::full, "Cannot use cg_streaming due to system memory constraints!\n");
+                }
+
+                // check whether there is enough memory available for cg_implicit
+                if (const std::vector<std::size_t> failed_cg_implicit_constraints = check_sizes(total_memory_needed_implicit_per_device, usable_device_memory_per_device); failed_cg_implicit_constraints.empty()) {
+                    // use the implicit solver type
+                    used_solver = solver_type::cg_implicit;
+                } else {
+                    // not enough device memory available for the implicit case
+                    throw kernel_launch_resources{ fmt::format("Not enough device memory available on device(s) {} even for the cg_implicit solver!", format_vector(failed_cg_implicit_constraints)) };
+                }
             }
         }
 
@@ -867,21 +887,34 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         // get the maximum possible memory allocation size per device
         const std::vector<detail::memory_size> max_mem_alloc_size_per_device = this->get_max_mem_alloc_size();
 
+        // utility function returning a vector of memory sizes that where the reasons for a failed check
+        const auto get_failed_memory_sizes = [&max_mem_alloc_size_per_device](const std::vector<std::size_t> &failed_devices) {
+            std::vector<detail::memory_size> failed_memory_sizes{};
+            for (const std::size_t device : failed_devices) {
+                failed_memory_sizes.push_back(max_mem_alloc_size_per_device[device]);
+            }
+            return failed_memory_sizes;
+        };
+
         // get the maximum single allocation size per device
         const std::vector<detail::memory_size> max_single_allocation_cg_explicit_size_per_device = data_distribution.calculate_maximum_explicit_kernel_matrix_memory_allocation_size_per_place(num_features, num_rhs);
+        const std::vector<detail::memory_size> max_single_allocation_cg_streaming_size_per_device = data_distribution.calculate_maximum_streaming_kernel_matrix_memory_allocation_size_per_place(num_features, num_rhs);
         const std::vector<detail::memory_size> max_single_allocation_cg_implicit_size_per_device = data_distribution.calculate_maximum_implicit_kernel_matrix_memory_allocation_size_per_place(num_features, num_rhs);
 
         // output the maximum memory allocation size per device
         detail::log(verbosity_level::full,
                     "  - maximum supported single memory allocation size: {}\n"
                     "  - maximum needed single memory allocation size (cg_explicit): {}\n"
+                    "  - maximum needed single memory allocation size (cg_streaming): {}\n"
                     "  - maximum needed single memory allocation size (cg_implicit): {}\n",
                     format_vector(max_mem_alloc_size_per_device),
                     format_vector(max_single_allocation_cg_explicit_size_per_device),
+                    format_vector(max_single_allocation_cg_streaming_size_per_device),
                     format_vector(max_single_allocation_cg_implicit_size_per_device));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "device_max_single_mem_alloc_size", max_mem_alloc_size_per_device }));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "device_max_mem_alloc_size_cg_explicit", max_single_allocation_cg_explicit_size_per_device }));
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "solver", "device_max_mem_alloc_size_cg_implicit", max_single_allocation_cg_implicit_size_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "device_max_single_mem_alloc_size", max_mem_alloc_size_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "device_max_mem_alloc_size_cg_explicit", max_single_allocation_cg_explicit_size_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "device_max_mem_alloc_size_cg_streaming", max_single_allocation_cg_streaming_size_per_device }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "solver", "device_max_mem_alloc_size_cg_implicit", max_single_allocation_cg_implicit_size_per_device }));
 
         // check whether the maximum single memory allocation sizes per device can be satisfied
         // check whether the maximum single cg_explicit memory allocation size can be satisfied
@@ -889,9 +922,20 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
             used_solver == solver_type::cg_explicit && !failed_cg_explicit_constraints.empty()) {
             // max mem alloc size constraints not fulfilled
             detail::log(verbosity_level::full,
-                        "Cannot use cg_explicit due to maximum single memory allocation constraints on device(s) {}! Falling back to cg_implicit.\n",
+                        "Cannot use cg_explicit due to maximum single memory allocation constraints ({}) on device(s) {}! Falling back to cg_streaming.\n",
+                        format_vector(get_failed_memory_sizes(failed_cg_explicit_constraints)),
                         format_vector(failed_cg_explicit_constraints));
             // can't use cg_explicit
+            used_solver = solver_type::cg_streaming;
+        }
+        if (const std::vector<std::size_t> failed_cg_streaming_constraints = check_sizes(max_single_allocation_cg_streaming_size_per_device, max_mem_alloc_size_per_device);
+            used_solver == solver_type::cg_streaming && !failed_cg_streaming_constraints.empty()) {
+            // max mem alloc size constraints not fulfilled
+            detail::log(verbosity_level::full,
+                        "Cannot use cg_streaming due to maximum single memory allocation constraints ({}) on device(s) {}! Falling back to cg_implicit.\n",
+                        format_vector(get_failed_memory_sizes(failed_cg_streaming_constraints)),
+                        format_vector(failed_cg_streaming_constraints));
+            // can't use cg_streaming
             used_solver = solver_type::cg_implicit;
         }
         if (const std::vector<std::size_t> failed_cg_implicit_constraints = check_sizes(max_single_allocation_cg_implicit_size_per_device, max_mem_alloc_size_per_device);
@@ -900,14 +944,14 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
             plssvm::detail::log(verbosity_level::full | verbosity_level::warning,
                                 "WARNING: if you are sure that the guaranteed maximum memory allocation size can be safely ignored on your device, "
                                 "this check can be disabled via \"-DPLSSVM_ENFORCE_MAX_MEM_ALLOC_SIZE=OFF\" during the CMake configuration!\n");
-            throw kernel_launch_resources{ fmt::format("Can't fulfill maximum single memory allocation constraint for device(s) {} even for the cg_implicit solver!", format_vector(failed_cg_implicit_constraints)) };
+            throw kernel_launch_resources{ fmt::format("Can't fulfill maximum single memory allocation constraint ({}) for device(s) {} even for the cg_implicit solver!", format_vector(get_failed_memory_sizes(failed_cg_implicit_constraints)), format_vector(failed_cg_implicit_constraints)) };
         }
 #endif
     }
 
     detail::log(verbosity_level::full,
                 "Using {} as solver for AX=B.\n\n",
-                detail::tracking_entry{ "solver", "solver_type", used_solver });
+                detail::tracking::tracking_entry{ "solver", "solver_type", used_solver });
 
     // perform dimensional reduction
     // note: structured binding is rejected by clang HIP compiler!
@@ -937,7 +981,7 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
                     "Assembled the kernel matrix in {}.\n",
                     assembly_duration);
     }
-    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
 
     // auto j = *(kernel_matrix[0]);
 
@@ -954,13 +998,13 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         detail::log(verbosity_level::full | verbosity_level::timing,
                     "Assembled the precondition matrix in {}.\n",
                     precondition_assembly_duration);
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "precondition_matrix", "precondition_matrix_assembly", precondition_assembly_duration }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "precondition_matrix", "precondition_matrix_assembly", precondition_assembly_duration }));
     }
-    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking_entry{ "parameter", "preconditioner", used_preconditioner }));
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "parameter", "preconditioner", used_preconditioner }));
 
     // choose the correct algorithm based on the (provided) solver type -> currently only CG available
     soa_matrix<real_type> X{};
-    unsigned long long num_iter{};
+    unsigned long long num_iter;
     std::tie(X, num_iter) = this->conjugate_gradients(kernel_matrix, B_red, P, used_epsilon, used_max_iter, used_solver);
 
     // calculate bias and undo dimensional reduction
@@ -981,7 +1025,8 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, unsigned long long> cs
         X_ret(i, num_rows_reduced) = -temp_sum;
     }
 
-    return std::make_tuple(std::move(X_ret), std::move(bias), num_iter);
+    std::vector<unsigned long long> placeholder{};
+    return std::make_tuple(std::move(X_ret), std::move(bias), placeholder);
 }
 
 /// @cond Doxygen_suppress

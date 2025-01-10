@@ -12,7 +12,7 @@
 #ifndef PLSSVM_BACKENDS_EXECUTION_RANGE_HPP_
 #define PLSSVM_BACKENDS_EXECUTION_RANGE_HPP_
 
-#include "fmt/core.h"     // fmt::formatter
+#include "fmt/base.h"     // fmt::formatter
 #include "fmt/ostream.h"  // fmt::ostream_formatter
 
 #include <iosfwd>   // forward declare std::ostream and std::istream
@@ -159,7 +159,9 @@ struct execution_range {
     /// The up-to three dimensional block (work-group) size.
     dim_type block{};
     /// The grids. Multiple grids are used, if the grid sizes would exceed the maximum allowed number. Also stores the offsets for the respective grids used in the kernels.
-    std::vector<grid_type> grids{};
+    /// Note: no default initialization due to a linker error occurring with NVIDIA's nvhpc!
+    std::vector<grid_type> grids;
+
 };
 
 /**

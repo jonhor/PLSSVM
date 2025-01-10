@@ -9,28 +9,48 @@
  */
 
 #include "plssvm/core.hpp"
-#include "plssvm/detail/cmd/data_set_variants.hpp"  // plssvm::detail::cmd::data_set_factory
-#include "plssvm/detail/cmd/parser_scale.hpp"       // plssvm::detail::cmd::parser_scale
-#include "plssvm/detail/logging.hpp"                // plssvm::detail::log
-#include "plssvm/detail/performance_tracker.hpp"    // plssvm::detail::tracking_entry,PLSSVM_DETAIL_PERFORMANCE_TRACKER_SAVE
-#include "plssvm/detail/utility.hpp"                // PLSSVM_IS_DEFINED
+#include "plssvm/detail/cmd/data_set_variants.hpp"         // plssvm::detail::cmd::data_set_factory
+#include "plssvm/detail/cmd/parser_scale.hpp"              // plssvm::detail::cmd::parser_scale
+#include "plssvm/detail/logging.hpp"                       // plssvm::detail::log
+#include "plssvm/detail/tracking/performance_tracker.hpp"  // plssvm::detail::tracking::tracking_entry, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SAVE,
+                                                           // PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_HARDWARE_SAMPLER_ENTRY, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SET_REFERENCE_TIME
+#include "plssvm/detail/utility.hpp"                       // PLSSVM_IS_DEFINED
 
-#include <chrono>     // std::chrono::{steady_clock, duration}
-#include <cstdlib>    // std::exit, EXIT_SUCCESS, EXIT_FAILURE
-#include <exception>  // std::exception
-#include <iostream>   // std::cerr, std::endl
-#include <utility>    // std::pair
-#include <variant>    // std::visit
+#if defined(PLSSVM_HARDWARE_SAMPLING_ENABLED)
+    #include "plssvm/detail/tracking/cpu/hardware_sampler.hpp"      // plssvm::detail::tracking::cpu_hardware_sampler
+    #include "plssvm/detail/tracking/hardware_sampler.hpp"          // plssvm::detail::tracking::hardware_sampler
+    #include "plssvm/detail/tracking/hardware_sampler_factory.hpp"  // plssvm::detail::tracking::make_hardware_sampler
+#endif
+
+#include <algorithm>   // std::for_each
+#include <chrono>      // std::chrono::{steady_clock, duration}, std::chrono_literals namespace
+#include <cstddef>     // std::size_t
+#include <cstdlib>     // std::exit, EXIT_SUCCESS, EXIT_FAILURE
+#include <exception>   // std::exception
+#include <functional>  // std::mem_fn
+#include <iostream>    // std::cerr, std::endl
+#include <utility>     // std::pair
+#include <variant>     // std::visit
+#include <vector>      // std::vector
+
+using namespace std::chrono_literals;
 
 int main(int argc, char *argv[]) {
     try {
         const std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SET_REFERENCE_TIME(start_time);
+
+        // create and start CPU hardware sampler if available
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_CPUS_ENABLED)
+        plssvm::detail::tracking::cpu_hardware_sampler cpu_sampler{ PLSSVM_HARDWARE_SAMPLING_INTERVAL };
+        cpu_sampler.start_sampling();
+#endif
 
         // create default parameters
         const plssvm::detail::cmd::parser_scale cmd_parser{ argc, argv };
 
         // send warning if the build type is release and assertions are enabled
-        if constexpr (std::string_view{ PLSSVM_BUILD_TYPE } == "Release" && PLSSVM_IS_DEFINED(PLSSVM_ASSERT_ENABLED)) {
+        if constexpr (std::string_view{ PLSSVM_BUILD_TYPE } == "Release" && PLSSVM_IS_DEFINED(PLSSVM_ENABLE_ASSERTS)) {
             plssvm::detail::log(plssvm::verbosity_level::full | plssvm::verbosity_level::warning,
                                 "WARNING: The build type is set to Release, but assertions are enabled. "
                                 "This may result in a noticeable performance degradation in parts of PLSSVM!\n");
@@ -39,7 +59,7 @@ int main(int argc, char *argv[]) {
         // output used parameter
         plssvm::detail::log(plssvm::verbosity_level::full,
                             "\ntask: scaling\n{}\n",
-                            plssvm::detail::tracking_entry{ "parameter", "", cmd_parser });
+                            plssvm::detail::tracking::tracking_entry{ "parameter", "", cmd_parser });
 
         // create data set and scale
         const auto data_set_visitor = [&](auto &&data) {
@@ -73,12 +93,18 @@ int main(int argc, char *argv[]) {
         };
         std::visit(data_set_visitor, plssvm::detail::cmd::data_set_factory(cmd_parser));
 
+        // stop CPU hardware sampler and dump results if available
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_CPUS_ENABLED)
+        cpu_sampler.stop_sampling();
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_HARDWARE_SAMPLER_ENTRY(cpu_sampler);
+#endif
+
         const std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
         plssvm::detail::log(plssvm::verbosity_level::full | plssvm::verbosity_level::timing,
                             "\nTotal runtime: {}\n",
-                            plssvm::detail::tracking_entry{ "", "total_time", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
+                            plssvm::detail::tracking::tracking_entry{ "", "total_time", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
 
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_SAVE(cmd_parser.performance_tracking_filename);
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SAVE(cmd_parser.performance_tracking_filename);
 
     } catch (const plssvm::exception &e) {
         std::cerr << e.what_with_loc() << std::endl;

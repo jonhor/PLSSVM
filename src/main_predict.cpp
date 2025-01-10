@@ -9,32 +9,53 @@
  */
 
 #include "plssvm/core.hpp"
-#include "plssvm/detail/cmd/data_set_variants.hpp"  // plssvm::detail::cmd::data_set_factory
-#include "plssvm/detail/cmd/parser_predict.hpp"     // plssvm::detail::cmd::parser_predict
-#include "plssvm/detail/logging.hpp"                // plssvm::detail::log
-#include "plssvm/detail/performance_tracker.hpp"    // plssvm::detail::tracking_entry, PLSSVM_DETAIL_PERFORMANCE_TRACKER_SAVE, PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY
-#include "plssvm/detail/utility.hpp"                // PLSSVM_IS_DEFINED
+#include "plssvm/detail/cmd/data_set_variants.hpp"         // plssvm::detail::cmd::data_set_factory
+#include "plssvm/detail/cmd/parser_predict.hpp"            // plssvm::detail::cmd::parser_predict
+#include "plssvm/detail/logging.hpp"                       // plssvm::detail::log
+#include "plssvm/detail/tracking/performance_tracker.hpp"  // plssvm::detail::tracking::tracking_entry, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SAVE,
+                                                           // PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_HARDWARE_SAMPLER_ENTRY
+                                                           // PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SET_REFERENCE_TIME
+#include "plssvm/detail/utility.hpp"                       // PLSSVM_IS_DEFINED
 
-#include "fmt/format.h"  // fmt::print, fmt::join
+#if defined(PLSSVM_HARDWARE_SAMPLING_ENABLED)
+    #include "plssvm/detail/tracking/cpu/hardware_sampler.hpp"      // plssvm::detail::tracking::cpu_hardware_sampler
+    #include "plssvm/detail/tracking/hardware_sampler.hpp"          // plssvm::detail::tracking::hardware_sampler
+    #include "plssvm/detail/tracking/hardware_sampler_factory.hpp"  // plssvm::detail::tracking::make_hardware_sampler
+#endif
+
+#include "fmt/format.h"  // fmt::print
 #include "fmt/os.h"      // fmt::ostream, fmt::output_file
+#include "fmt/ranges.h"  // fmt::join
 
-#include <chrono>     // std::chrono::{steady_clock, duration}
-#include <cstdlib>    // EXIT_SUCCESS, EXIT_FAILURE
-#include <exception>  // std::exception
-#include <fstream>    // std::ofstream
-#include <iostream>   // std::cerr, std::endl
-#include <variant>    // std::visit
-#include <vector>     // std::vector
+#include <algorithm>   // std::for_each
+#include <chrono>      // std::chrono::{steady_clock, duration}, std::chrono_literals namespace
+#include <cstdlib>     // EXIT_SUCCESS, EXIT_FAILURE
+#include <exception>   // std::exception
+#include <fstream>     // std::ofstream
+#include <functional>  // std::mem_fn
+#include <iostream>    // std::cerr, std::endl
+#include <utility>     // std::pair
+#include <variant>     // std::visit
+#include <vector>      // std::vector
+
+using namespace std::chrono_literals;
 
 int main(int argc, char *argv[]) {
     try {
         const std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SET_REFERENCE_TIME(start_time);
+
+        // create and start CPU hardware sampler if available
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_CPUS_ENABLED)
+        plssvm::detail::tracking::cpu_hardware_sampler cpu_sampler{ PLSSVM_HARDWARE_SAMPLING_INTERVAL };
+        cpu_sampler.start_sampling();
+#endif
 
         // parse SVM parameter from command line
         const plssvm::detail::cmd::parser_predict cmd_parser{ argc, argv };
 
         // send warning if the build type is release and assertions are enabled
-        if constexpr (std::string_view{ PLSSVM_BUILD_TYPE } == "Release" && PLSSVM_IS_DEFINED(PLSSVM_ASSERT_ENABLED)) {
+        if constexpr (std::string_view{ PLSSVM_BUILD_TYPE } == "Release" && PLSSVM_IS_DEFINED(PLSSVM_ENABLE_ASSERTS)) {
             plssvm::detail::log(plssvm::verbosity_level::full | plssvm::verbosity_level::warning,
                                 "WARNING: The build type is set to Release, but assertions are enabled. "
                                 "This may result in a noticeable performance degradation in parts of PLSSVM!\n");
@@ -43,11 +64,26 @@ int main(int argc, char *argv[]) {
         // output used parameter
         plssvm::detail::log(plssvm::verbosity_level::full,
                             "\ntask: prediction\n{}\n",
-                            plssvm::detail::tracking_entry{ "parameter", "", cmd_parser });
+                            plssvm::detail::tracking::tracking_entry{ "parameter", "", cmd_parser });
 
         // create data set
         const auto data_set_visitor = [&](auto &&data) {
             using label_type = typename std::remove_reference_t<decltype(data)>::label_type;
+
+            // check whether SYCL is used as backend (it is either requested directly or as automatic backend)
+            const bool use_sycl_as_backend{ cmd_parser.backend == plssvm::backend_type::sycl || (cmd_parser.backend == plssvm::backend_type::automatic && plssvm::determine_default_backend() == plssvm::backend_type::sycl) };
+
+            // create default csvm
+            const std::unique_ptr<plssvm::csvm> svm = use_sycl_as_backend ? plssvm::make_csvm(cmd_parser.backend, cmd_parser.target, plssvm::sycl_implementation_type = cmd_parser.sycl_implementation_type)
+                                                                          : plssvm::make_csvm(cmd_parser.backend, cmd_parser.target);
+
+#if defined(PLSSVM_HARDWARE_SAMPLING_ENABLED)
+            // initialize hardware sampling
+            std::vector<std::unique_ptr<plssvm::detail::tracking::hardware_sampler>> sampler =
+                plssvm::detail::tracking::create_hardware_sampler(svm->get_target_platform(), svm->num_available_devices(), PLSSVM_HARDWARE_SAMPLING_INTERVAL);
+            // start sampling
+            std::for_each(sampler.begin(), sampler.end(), std::mem_fn(&plssvm::detail::tracking::hardware_sampler::start_sampling));
+#endif
 
             // create model
             const plssvm::model<label_type> model{ cmd_parser.model_filename };
@@ -87,12 +123,6 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            // check whether SYCL is used as backend (it is either requested directly or as automatic backend)
-            const bool use_sycl_as_backend{ cmd_parser.backend == plssvm::backend_type::sycl || (cmd_parser.backend == plssvm::backend_type::automatic && plssvm::determine_default_backend() == plssvm::backend_type::sycl) };
-
-            // create default csvm
-            const std::unique_ptr<plssvm::csvm> svm = use_sycl_as_backend ? plssvm::make_csvm(cmd_parser.backend, cmd_parser.target, plssvm::sycl_implementation_type = cmd_parser.sycl_implementation_type)
-                                                                          : plssvm::make_csvm(cmd_parser.backend, cmd_parser.target);
             // predict labels
             const std::vector<label_type> predicted_labels = svm->predict(model, data);
 
@@ -106,9 +136,9 @@ int main(int argc, char *argv[]) {
                 const std::chrono::time_point write_end_time = std::chrono::steady_clock::now();
                 plssvm::detail::log(plssvm::verbosity_level::full | plssvm::verbosity_level::timing,
                                     "Write {} predictions in {} to the file '{}'.\n",
-                                    plssvm::detail::tracking_entry{ "predictions_write", "num_predictions", predicted_labels.size() },
-                                    plssvm::detail::tracking_entry{ "predictions_write", "time", std::chrono::duration_cast<std::chrono::milliseconds>(write_end_time - write_start_time) },
-                                    plssvm::detail::tracking_entry{ "predictions_write", "filename", cmd_parser.predict_filename });
+                                    plssvm::detail::tracking::tracking_entry{ "predictions_write", "num_predictions", predicted_labels.size() },
+                                    plssvm::detail::tracking::tracking_entry{ "predictions_write", "time", std::chrono::duration_cast<std::chrono::milliseconds>(write_end_time - write_start_time) },
+                                    plssvm::detail::tracking::tracking_entry{ "predictions_write", "filename", cmd_parser.predict_filename });
             }
 
             // print achieved accuracy (if possible)
@@ -121,19 +151,34 @@ int main(int argc, char *argv[]) {
                 plssvm::detail::log(plssvm::verbosity_level::full, "\n{}\n", report);
                 // print only accuracy for LIBSVM conformity
                 plssvm::detail::log(plssvm::verbosity_level::libsvm, "{} (classification)\n", report.accuracy());
-                PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "accuracy", "achieved_accuracy", report.accuracy().achieved_accuracy }));
-                PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "accuracy", "num_correct", report.accuracy().num_correct }));
-                PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "accuracy", "num_total", report.accuracy().num_total }));
+                PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "accuracy", "achieved_accuracy", report.accuracy().achieved_accuracy }));
+                PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "accuracy", "num_correct", report.accuracy().num_correct }));
+                PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "accuracy", "num_total", report.accuracy().num_total }));
             }
+
+#if defined(PLSSVM_HARDWARE_SAMPLING_ENABLED)
+            // stop sampling
+            std::for_each(sampler.begin(), sampler.end(), std::mem_fn(&plssvm::detail::tracking::hardware_sampler::stop_sampling));
+            // write samples to yaml file
+            std::for_each(sampler.cbegin(), sampler.cend(), [&](const std::unique_ptr<plssvm::detail::tracking::hardware_sampler> &s) {
+                PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_HARDWARE_SAMPLER_ENTRY(*s);
+            });
+#endif
         };
         std::visit(data_set_visitor, plssvm::detail::cmd::data_set_factory(cmd_parser));
+
+        // stop CPU hardware sampler and dump results if available
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_CPUS_ENABLED)
+        cpu_sampler.stop_sampling();
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_HARDWARE_SAMPLER_ENTRY(cpu_sampler);
+#endif
 
         const std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
         plssvm::detail::log(plssvm::verbosity_level::full | plssvm::verbosity_level::timing,
                             "\nTotal runtime: {}\n",
-                            plssvm::detail::tracking_entry{ "", "total_time", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
+                            plssvm::detail::tracking::tracking_entry{ "", "total_time", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time) });
 
-        PLSSVM_DETAIL_PERFORMANCE_TRACKER_SAVE(cmd_parser.performance_tracking_filename);
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_SAVE(cmd_parser.performance_tracking_filename);
 
     } catch (const plssvm::exception &e) {
         std::cerr << e.what_with_loc() << std::endl;

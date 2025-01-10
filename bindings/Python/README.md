@@ -10,10 +10,13 @@
         - [plssvm.Parameter](#plssvmparameter)
         - [plssvm.DataSet](#plssvmdataset)
         - [plssvm.CSVM](#plssvmcsvm)
-        - [plssvm.openmp.CSVM, plssvm.cuda.CSVM, plssvm.hip.CSVM, plssvm.opencl.CSVM, plssvm.sycl.CSVM, plssvm.dpcpp.CSVM, plssvm.adaptivecpp.CSVM](#plssvmopenmpcsvm-plssvmcudacsvm-plssvmhipcsvm-plssvmopenclcsvm-plssvmsyclcsvm-plssvmdpcppcsvm-plssvmadaptivecppcsvm)
+        - [plssvm.openmp.CSVM, plssvm.stdpar.CSVM, plssvm.cuda.CSVM, plssvm.hip.CSVM, plssvm.opencl.CSVM, plssvm.sycl.CSVM, plssvm.dpcpp.CSVM, plssvm.adaptivecpp.CSVM](#plssvmopenmpcsvm-plssvmcudacsvm-plssvmhipcsvm-plssvmopenclcsvm-plssvmsyclcsvm-plssvmdpcppcsvm-plssvmadaptivecppcsvm)
         - [plssvm.Model](#plssvmmodel)
         - [plssvm.Version](#plssvmversion)
-        - [plssvm.detail.PerformanceTracker](#plssvmdetailperformancetracker)
+        - [plssvm.detail.tracking.PerformanceTracker](#plssvmdetailtrackingperformancetracker)
+        - [plssvm.detail.tracking.Events](#plssvmdetailtrackingevent-plssvmdetailtrackingevents)
+        - [plssvm.detail.tracking.HardwareSampler](#plssvmdetailtrackinghardwaresampler)
+        - [plssvm.detail.tracking.CpuHardwareSampler, plssvm.detail.tracking.GpuNvidiaHardwareSampler, plssvm.detail.tracking.GpuAmdHardwareSampler, plssvm.detail.tracking.GpuIntelHardwareSampler](#plssvmdetailtrackingcpuhardwaresampler-plssvmdetailtrackinggpunvidiahardwaresampler-plssvmdetailtrackinggpuamdhardwaresampler-plssvmdetailtrackinggpuintelhardwaresampler)
     - [Free functions](#free-functions)
     - [Exceptions](#exceptions)
 
@@ -64,23 +67,23 @@ they were made available during PLSSVM's build step.
 The following attributes are supported
 by [`sklearn.svm.SVC`](https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html):
 
-| implementation status | attribute                                                                | sklearn description                                                                                                                                                                                                                                                                                                  |
-|:---------------------:|--------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|  :white_check_mark:   | `class_weight_ : ndarray of shape (n_classes,)`                          | Multipliers of parameter C for each class. Computed based on the `class_weight` parameter. **Note**: returns all `1.0` since the `class_weight` parameter is currently not supported.                                                                                                                                | 
-|  :white_check_mark:   | `classes_ : ndarray of shape (n_classes,)`                               | The classes labels.                                                                                                                                                                                                                                                                                                  |
-|          :x:          | `coef_ : ndarray of shape (n_classes * (n_classes - 1) / 2, n_features)` | Weights assigned to the features when `kernel="linear"`.                                                                                                                                                                                                                                                             |
-|          :x:          | `dual_coef_ : ndarray of shape (n_classes -1, n_SV)`                     | Dual coefficients of the support vector in the decision function, multiplied by their targets.                                                                                                                                                                                                                       |
-|  :white_check_mark:   | `fit_status_ : int`                                                      | 0 if correctly fitted, 1 otherwise (will raise warning).                                                                                                                                                                                                                                                             |
-|          :x:          | `intercept_ : ndarray of shape (n_classes * (n_classes - 1) / 2,)`       | Constants in decision function.                                                                                                                                                                                                                                                                                      |
-|  :white_check_mark:   | `n_features_in_ : int`                                                   | Number of features seen during `fit`.                                                                                                                                                                                                                                                                                |
-|          :x:          | `feature_names_in_ : ndarray of shape (n_features_in_,)`                 | Names of features seen during `fit`.                                                                                                                                                                                                                                                                                 |
-|  :white_check_mark:   | `n_iter_ : ndarray of shape (n_classes * (n_classes - 1) / 2,)`          | Number of iterations run by the optimization routine to fit the model. The shape of this attribute depends on the number of models optimized which in turn depends on the number of classes. **Note**: corresponds to the number of CG iterations, for 'ovr' all values in the array are guaranteed to be identical. |
-|  :white_check_mark:   | `support_ : ndarray of shape (n_SV)`                                     | Indices of support vectors.                                                                                                                                                                                                                                                                                          |
-|  :white_check_mark:   | `support_vectors_ : ndarray of shape (n_SV, n_features)`                 | Support vectors.                                                                                                                                                                                                                                                                                                     |
-|  :white_check_mark:   | `n_support_ : ndarray of shape (n_classes,), dtype=int32`                | Number of support vectors for each class.                                                                                                                                                                                                                                                                            |
-|          :x:          | `probA_ : ndarray of shape (n_classes * (n_classes - 1) / 2)`            | Parameter learned in Platt scaling when `probability=True`.                                                                                                                                                                                                                                                          |
-|          :x:          | `probB_ : ndarray of shape (n_classes * (n_classes - 1) / 2)`            | Parameter learned in Platt scaling when `probability=True`.                                                                                                                                                                                                                                                          |
-|  :white_check_mark:   | `shape_fit_ : tuple of int of shape (n_dimensions_of_X,)`                | Array dimensions of training vector `X`.                                                                                                                                                                                                                                                                             |
+| implementation status | attribute                                                                                                             | sklearn description                                                                                                                                                                                                                                                                                                                                       |
+|:---------------------:|-----------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  :white_check_mark:   | `class_weight_ : ndarray of shape (n_classes,)`                                                                       | Multipliers of parameter C for each class. Computed based on the `class_weight` parameter. **Note**: returns all `1.0` since the `class_weight` parameter is currently not supported.                                                                                                                                                                     | 
+|  :white_check_mark:   | `classes_ : ndarray of shape (n_classes,)`                                                                            | The classes labels.                                                                                                                                                                                                                                                                                                                                       |
+|          :x:          | `coef_ : ndarray of shape (n_classes * (n_classes - 1) / 2, n_features)`                                              | Weights assigned to the features when `kernel="linear"`.                                                                                                                                                                                                                                                                                                  |
+|          :x:          | `dual_coef_ : ndarray of shape (n_classes -1, n_SV)`                                                                  | Dual coefficients of the support vector in the decision function, multiplied by their targets.                                                                                                                                                                                                                                                            |
+|  :white_check_mark:   | `fit_status_ : int`                                                                                                   | 0 if correctly fitted, 1 otherwise (will raise warning).                                                                                                                                                                                                                                                                                                  |
+|          :x:          | `intercept_ : ndarray of shape (n_classes * (n_classes - 1) / 2,)`                                                    | Constants in decision function.                                                                                                                                                                                                                                                                                                                           |
+|  :white_check_mark:   | `n_features_in_ : int`                                                                                                | Number of features seen during `fit`.                                                                                                                                                                                                                                                                                                                     |
+|          :x:          | `feature_names_in_ : ndarray of shape (n_features_in_,)`                                                              | Names of features seen during `fit`.                                                                                                                                                                                                                                                                                                                      |
+|  :white_check_mark:   | `n_iter_ : ndarray of shape (n_classes * (n_classes - 1) / 2,)` for 'ovo' and ndarray of shape (n_classes,) for 'ovr' | Number of iterations run by the optimization routine to fit the model. The shape of this attribute depends on the number of models optimized which in turn depends on the number of classes and decision function. **Note**: for 'ovr' the values correspond to the number of CG iterations necessary for each right-hand side (i.e., class) to converge. |
+|  :white_check_mark:   | `support_ : ndarray of shape (n_SV)`                                                                                  | Indices of support vectors.                                                                                                                                                                                                                                                                                                                               |
+|  :white_check_mark:   | `support_vectors_ : ndarray of shape (n_SV, n_features)`                                                              | Support vectors.                                                                                                                                                                                                                                                                                                                                          |
+|  :white_check_mark:   | `n_support_ : ndarray of shape (n_classes,), dtype=int32`                                                             | Number of support vectors for each class.                                                                                                                                                                                                                                                                                                                 |
+|          :x:          | `probA_ : ndarray of shape (n_classes * (n_classes - 1) / 2)`                                                         | Parameter learned in Platt scaling when `probability=True`.                                                                                                                                                                                                                                                                                               |
+|          :x:          | `probB_ : ndarray of shape (n_classes * (n_classes - 1) / 2)`                                                         | Parameter learned in Platt scaling when `probability=True`.                                                                                                                                                                                                                                                                                               |
+|  :white_check_mark:   | `shape_fit_ : tuple of int of shape (n_dimensions_of_X,)`                                                             | Array dimensions of training vector `X`.                                                                                                                                                                                                                                                                                                                  |
 
 ### Methods
 
@@ -126,7 +129,7 @@ More detailed description of the class methods:
 
 - `get_params(deep=True)`: Get parameters for this estimator.
     - Parameters:
-        - `deep : bool, default=True`: If True, will return the parameters for this estimator and contained subobjects
+        - `deep : bool, default=True`: If True, will return the parameters for this estimator and contained sub-objects
           that are estimators. **Note**: not applicable, therefore, ignored.
     - Returns:
         - `params : dict`: Parameter names mapped to their values.
@@ -205,13 +208,19 @@ If a SYCL implementation is available, additional enumerations are available:
 | `ImplementationType`   | `AUTOMATIC`, `DPCPP`, `ADAPTIVECPP` | The different supported SYCL implementation types (default: `AUTOMATIC`). If `AUTOMATIC` is provided, determines the used SYCL implementation based on the value of `-DPLSSVM_SYCL_BACKEND_PREFERRED_IMPLEMENTATION` provided during PLSSVM'S build step. |
 | `KernelInvocationType` | `AUTOMATIC`, `ND_RANGE`             | The different supported SYCL kernel invocation types (default: `AUTOMATIC`). If `AUTOMATIC` is provided, simply uses `ND_RANGE` (only implemented to be able to add new invocation types in the future).                                                  |
 
+If the stdpar backend is available, an additional enumeration is available:
+
+| enumeration          | values                                                        | description                                     |
+|----------------------|---------------------------------------------------------------|-------------------------------------------------|
+| `ImplementationType` | `NVHPC`, `ROC_STDPAR`, `INTEL_LLVM`, `ADAPTIVECPP`, `GNU_TBB` | The different supported stdpar implementations. |
+
 ### Classes and submodules
 
 The following tables list all PLSSVM classes exposed on the Python side:
 
 #### `plssvm.Parameter`
 
-The parameter class encapsulates all necessary hyper-parameters needed to fit an SVM.
+The parameter class encapsulates all necessary hyperparameters needed to fit an SVM.
 
 | constructors                                                                                            | description                                                                      |
 |---------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
@@ -329,24 +338,28 @@ If the most performant backend should be used, it is sufficient to use `plssvm.C
 `sycl_implementation_type` to choose between DPC++ and AdaptiveCpp as SYCL implementations
 and `sycl_kernel_invocation_type` to choose between the two different SYCL kernel invocation types.
 
-| methods                                                                                                                                      | description                                                                                                                                                                                                        |
-|----------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `set_params(params)`                                                                                                                         | Replace the current `plssvm.Parameter` with the provided one.                                                                                                                                                      |
-| `set_params([kernel_type=KernelFunctionType.LINEAR, degree=3, gamma=*1/#features*, coef=0.0, cost=1.0])`                                     | Replace the current `plssvm.Parameter` values with the provided named parameters.                                                                                                                                  |
-| `get_params()`                                                                                                                               | Return the `plssvm.Parameter` that are used in the CSVM to learn the model.                                                                                                                                        |
-| `get_target_platform()`                                                                                                                      | Return the target platfrom this CSVM is running on.                                                                                                                                                                |
-| `fit(data_set, [epsilon=0.01, classification=plssvm.ClassificatioType.OAA, solver=plssvm.SolverType.AUTOMATIC, max_iter=*#datapoints - 1*])` | Learn a LSSVM model given the provided data points and optional parameters (the termination criterion in the CG algorithm, the classification strategy, the used solver, and the maximum number of CG iterations). |
-| `predict(model, data_set)`                                                                                                                   | Predict the labels of the data set using the previously learned model.                                                                                                                                             |
-| `score(model)`                                                                                                                               | Score the model with respect to itself returning its accuracy.                                                                                                                                                     |
-| `score(model, data_set)`                                                                                                                     | Score the model given the provided data set returning its accuracy.                                                                                                                                                |
+| methods                                                                                                                                      | description                                                                                                                                                                                                         |
+|----------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `set_params(params)`                                                                                                                         | Replace the current `plssvm.Parameter` with the provided one.                                                                                                                                                       |
+| `set_params([kernel_type=KernelFunctionType.LINEAR, degree=3, gamma=*1/#features*, coef=0.0, cost=1.0])`                                     | Replace the current `plssvm.Parameter` values with the provided named parameters.                                                                                                                                   |
+| `get_params()`                                                                                                                               | Return the `plssvm.Parameter` that are used in the CSVM to learn the model.                                                                                                                                         |
+| `get_target_platform()`                                                                                                                      | Return the target platform this CSVM is running on.                                                                                                                                                                 |
+| `num_available_devices()`                                                                                                                    | Return the number of available devices, i.e., if the target platform represents a GPU, this function returns the number of used GPUs. Returns always 1 for CPU only backends.                                       |
+| `fit(data_set, [epsilon=0.01, classification=plssvm.ClassificatioType.OAA, solver=plssvm.SolverType.AUTOMATIC, max_iter=*#datapoints - 1*])` | Learn a LS-SVM model given the provided data points and optional parameters (the termination criterion in the CG algorithm, the classification strategy, the used solver, and the maximum number of CG iterations). |
+| `predict(model, data_set)`                                                                                                                   | Predict the labels of the data set using the previously learned model.                                                                                                                                              |
+| `score(model)`                                                                                                                               | Score the model with respect to itself returning its accuracy.                                                                                                                                                      |
+| `score(model, data_set)`                                                                                                                     | Score the model given the provided data set returning its accuracy.                                                                                                                                                 |
 
-#### `plssvm.openmp.CSVM`, `plssvm.cuda.CSVM`, `plssvm.hip.CSVM`, `plssvm.opencl.CSVM`, `plssvm.sycl.CSVM`, `plssvm.dpcpp.CSVM`, `plssvm.adaptivecpp.CSVM`
+#### `plssvm.openmp.CSVM`, `plssvm.stdpar.CSVM`, plssvm.cuda.CSVM`, `plssvm.hip.CSVM`, `plssvm.opencl.CSVM`, `plssvm.sycl.CSVM`, `plssvm.dpcpp.CSVM`, `plssvm.adaptivecpp.CSVM`
 
 These classes represent the backend specific CSVMs.
 **Note**: they are only available if the respective backend has been enabled during PLSSVM's build step.
 **Note**: the `plssvm.sycl.CSVM` is equal to the respective `plssvm.dpcpp.CSVM` or `plssvm.adaptivecpp.CSVM` if only one
 SYCL implementation is available or the SYCL implementation defined by `-DPLSSVM_SYCL_BACKEND_PREFERRED_IMPLEMENTATION`
 during PLSSVM's build step.
+**Note**: when using `plssvm.stdpar.CSVM` together with AdaptiveCpp as stdpar implementation, currently only the CPU is
+supported as target.
+
 These classes inherit all methods from the base `plssvm.CSVM` class.
 
 | constructors                              | description                                                                                                                                  |
@@ -361,18 +374,19 @@ These classes inherit all methods from the base `plssvm.CSVM` class.
 In case of the SYCL CSVMs (`plssvm.sycl.CSVM`, `plssvm.dpcpp.CSVM`, and `plssvm.adaptivecpp.CSVM`) the additional named
 argument `sycl_kernel_invocation_type` to choose between the two different SYCL kernel invocation types can be provided.
 
-Except for the `plssvm.openmp.CSVM` the following methods are additional available for the backend specific CSVMs.
-
-| methods                   | description                                                                                                                           |
-|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `num_available_devices()` | Return the number of available devices, i.e., if the target platform represents a GPU, this function returns the number of used GPUs. |
-
 In case of the SYCL CSVMs (`plssvm.sycl.CSVM`, `plssvm.dpcpp.CSVM`, and `plssvm.adaptivecpp.CSVM`) the following methods
 are additional available for the backend specific CSVMs.
 
 | methods                        | description                             |
 |--------------------------------|-----------------------------------------|
 | `get_kernel_invocation_type()` | Return the SYCL kernel invocation type. |
+
+In case of the stdpar CSVM (`plssvm.stdpar.CSVM`) the following method is additional available for the backend specific
+CSVM.
+
+| methods                     | description                                 |
+|-----------------------------|---------------------------------------------|
+| `get_implementation_type()` | Return the used stdpar implementation type. |
 
 #### `plssvm.Model`
 
@@ -389,10 +403,10 @@ type.
 | methods                     | description                                                                                                                                                      |
 |-----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `save(filename)`            | Save the current model to the provided file.                                                                                                                     |
-| `num_support_vectors()`     | Return the number of support vectors. **Note**: for LSSVMs this corresponds to the number of training data points.                                               |
+| `num_support_vectors()`     | Return the number of support vectors. **Note**: for LS-SVMs this corresponds to the number of training data points.                                              |
 | `num_features()`            | Return the number of features each support vector has.                                                                                                           |
 | `get_params()`              | Return the `plssvm.Parameter` that were used to learn this model.                                                                                                |
-| `support_vectors()`         | Return the support vectors learned in this model. **Note**: for LSSVMs this corresponds to all training data points.                                             |
+| `support_vectors()`         | Return the support vectors learned in this model. **Note**: for LS-SVMs this corresponds to all training data points.                                            |
 | `labels()`                  | Return the labels of the support vectors.                                                                                                                        |
 | `num_classes()`             | Return the number of different classes.                                                                                                                          |
 | `weights()`                 | Return the learned weights.                                                                                                                                      |
@@ -412,21 +426,122 @@ A class encapsulating the version information of the used PLSSVM installation.
 | `minor : int`      | The minor PLSSVM version.                 |
 | `patch : int`      | The patch PLSSVM version.                 |
 
-#### `plssvm.detail.PerformanceTracker`
+#### `plssvm.detail.tracking.PerformanceTracker`
 
-A submodule used to track various performance statistics like runtimes, but also the used setup and hyper-parameters.
+A submodule used to track various performance statistics like runtimes, but also the used setup and hyperparameters.
 The tracked metrics can be saved to a YAML file for later post-processing.
 **Note**: only available if PLSSVM was built with `-DPLSSVM_ENABLE_PERFORMANCE_TRACKING=ON`!
 
-| function                                           | description                                                                      |
-|----------------------------------------------------|----------------------------------------------------------------------------------|
-| `add_string_tracking_entry(category, name, value)` | Add a new tracking entry to the provided category with the given name and value. |
-| `add_parameter_tracking_entry(params)`             | Add a new tracking entry for the provided `plssvm.Parameter` object.             |
-| `pause()`                                          | Pause the current performance tracking.                                          |
-| `resume()`                                         | Resume performance tracking.                                                     |
-| `save(filename)`                                   | Save all collected tracking information to the provided file.                    |
-| `is_tracking()`                                    | Check whether performance tracking is currently enabled.                         |
-| `clear_tracking_entries()`                         | Remove all currently trackend entries from the performance tracker.              |
+| function                                           | description                                                                             |
+|----------------------------------------------------|-----------------------------------------------------------------------------------------|
+| `add_string_tracking_entry(category, name, value)` | Add a new tracking entry to the provided category with the given name and value.        |
+| `add_parameter_tracking_entry(params)`             | Add a new tracking entry for the provided `plssvm.Parameter` object.                    |
+| `add_hardware_sampler_entry(sampler)`              | Add a new tracking entry including all hardware samples collected by the given sampler. |
+| `add_event()`                                      | Add a new generic event to the tracker.                                                 |
+| `pause()`                                          | Pause the current performance tracking.                                                 |
+| `resume()`                                         | Resume performance tracking.                                                            |
+| `save(filename)`                                   | Save all collected tracking information to the provided file.                           |
+| `set_reference_time(time)`                         | Set a new reference time to which the relative event and samples times are calculated.  |
+| `get_reference_time()`                             | Get the current reference type.                                                         |
+| `is_tracking()`                                    | Check whether performance tracking is currently enabled.                                |
+| `get_tracking_entries()`                           | Return a dictionary that contains all previously added tracking entries.                |
+| `get_events()`                                     | Return all previously recorded events.                                                  |
+| `clear_tracking_entries()`                         | Remove all currently tracked entries from the performance tracker.                      |
+
+#### `plssvm.detail.tracking.Event`, `plssvm.detail.tracking.Events`
+
+Two rather similar classes.
+**Note**: both classes are only available if PLSSVM was built with `-DPLSSVM_ENABLE_PERFORMANCE_TRACKING=ON`!
+
+The `plssvm.detail.tracking.Event` class is a simple POD encapsulating the time point when
+an event occurred and the respective event name.
+
+| constructors              | description            |
+|---------------------------|------------------------|
+| `Event(time_point, name)` | Construct a new event. |
+
+| attributes          | description                              |
+|---------------------|------------------------------------------|
+| `time_point : time` | The time point when this event occurred. |
+| `name : string`     | The name of this event.                  |
+
+The `plssvm.detail.tracking.Events` class stores multiple `plssvm.detail.tracking.Event`s.
+
+| constructors | description                                 |
+|--------------|---------------------------------------------|
+| `Events()`   | Construct a new and empty events container. |
+
+| methods                       | description                                                                   |
+|-------------------------------|-------------------------------------------------------------------------------|
+| `add_event(event)`            | Add a new event to the events list.                                           |
+| `add_event(time_point, name)` | Add a new event that occurred at the provided time point with the given name. |
+| `at(idx)`                     | Retrieve the event at the provided index.                                     |
+| `num_events()`                | Return the number of stored events.                                           |
+| `empty()`                     | Check whether currently any event has been stored/recorded.                   |
+| `get_time_points()`           | Return all recorded time points.                                              |
+| `get_names()`                 | Return all recorded names.                                                    |
+
+#### `plssvm.detail.tracking.HardwareSampler`
+
+The main class responsible for sampling different hardware information like device utilization, clock frequencies,
+memory utilization, or power consumption.
+**Note**: the target specific hardware samplers are only available if the respective target has been enabled during
+PLSSVM's build step.
+These backend specific CSVMs can also directly be used,
+e.g., `plssvm.detail.tracking.HardwareSampler(plssvm.TargetPlatform.GPU_NVIDIA)` is equal
+to `plssvm.detail.tracking.GpuNvidiaHardwareSampler` (the same also holds for all other target platforms).
+**Note**: in this case, the various getters for the hardware samplers will not be available!
+
+| constructors                                            | description                                                                                                                                                             |
+|---------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `HardwareSampler(target, device_id, sampling_interval)` | Create a new hardware sampler for the provided target. The device with the given ID is used and the samples are generated after sampling_interval much time has passed. |
+| `HardwareSampler(target, device_id)`                    | Create a new hardware sampler for the provided target. The device with the given ID is used. The sampling interval is determined during PLSSVM's build step.            |
+
+| methods               | description                                                                                                                      |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `start()`             | Start the hardware sampling. May only be called once for each hardware sampler.                                                  |
+| `stop()`              | Stop the hardware sampling. May only be called once for each hardware sampler. `start()` must be called first!                   |
+| `pause()`             | Pause the hardware sampling.                                                                                                     |
+| `resume()`            | Resume the hardware sampling.                                                                                                    |
+| `has_started()`       | Check whether the hardware sampling has already started. Also returns `True` after a call to `stop()`.                           |
+| `is_sampling()`       | Check whether the hardware sampler is currently sampling. `True` if the sampler hasn't been started yet or `pause()` was called. |
+| `has_stopped()`       | Check whether the hardware sampling has been stopped.                                                                            |
+| `time_points()`       | Return the time points at which the samples have been queried.                                                                   |
+| `sampling_interval()` | The interval in milliseconds at which the samples are recorded.                                                                  |
+| `sampling_target()`   | Return the `plssvm.TargetPlatform` that is sampled by this hardware sampler.                                                     |
+
+#### `plssvm.detail.tracking.CpuHardwareSampler`, `plssvm.detail.tracking.GpuNvidiaHardwareSampler`, `plssvm.detail.tracking.GpuAmdHardwareSampler`, `plssvm.detail.tracking.GpuIntelHardwareSampler`
+
+These classes represent the target specific hardware sampler.
+**Note**: they are only available if the respective target has been enabled during PLSSVM's build step.
+
+These classes inherit all methods from the base `plssvm.detail.tracking.HardwareSampler` class.
+
+| constructors                                    | description                                                                                                                                     |
+|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `HardwareSampler(device_id, sampling_interval)` | Create a new hardware sampler. The device with the given ID is used and the samples are generated after sampling_interval much time has passed. |
+| `HardwareSampler(device_id)`                    | Create a new hardware sampler. The device with the given ID is used. The sampling interval is determined during PLSSVM's build step.            |
+
+All hardware samplers have the following additional methods.
+**Note**: the return types differ between the different hardware samplers.
+
+| methods                 | description                                              |
+|-------------------------|----------------------------------------------------------|
+| `general_samples()`     | Return all collect general hardware samples.             |
+| `clock_samples()`       | Return all collect clock related hardware samples.       |
+| `power_samples()`       | Return all collect power related hardware samples.       |
+| `memory_samples()`      | Return all collect memory related hardware samples.      |
+| `temperature_samples()` | Return all collect temperature related hardware samples. |
+
+In case of the CPU hardware sampler, two additional methods are available.
+
+| methods                | description                                             |
+|------------------------|---------------------------------------------------------|
+| `gfx_samples()`        | Return all collect gfx (iGPU) related hardware samples. |
+| `idle_state_samples()` | Return all collect idle state related hardware samples. |
+
+For the definitions and available methods of the returned sampling structs (encapsulating the actual samples using
+optionals), refer to the respective binding implementation files.
 
 ### Free functions
 
@@ -461,6 +576,21 @@ If a SYCL implementation is available, additional free functions are available:
 |-----------------------------------------|----------------------------------------------------------------------------------|
 | `list_available_sycl_implementations()` | List all available SYCL implementations (determined during PLSSVM's build step). |
 
+If a stdpar implementation is available, additional free functions are available:
+
+| function                                  | description                                                                                                                                   |
+|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `list_available_stdpar_implementations()` | List all available stdpar implementations (determined during PLSSVM's build step; currently always guaranteed to be only one implementation). |
+
+If hardware sampling is available, additional free functions are available:
+
+| function                            | description                                                                          |
+|-------------------------------------|--------------------------------------------------------------------------------------|
+| `has_cpu_hardware_sampler()`        | Returns `true` if the CPU hardware sampler is available, `false` otherwise.          |
+| `has_gpu_nvidia_hardware_sampler()` | Returns `true` if the NVIDIA GPU hardware sampler is available, `false` otherwise.   |
+| `has_gpu_amd_hardware_sampler()`    | Returns `true` if the NVIDIA AMD hardware sampler is available, `false` otherwise.   |
+| `has_gpu_intel_hardware_sampler()`  | Returns `true` if the NVIDIA Intel hardware sampler is available, `false` otherwise. |
+
 ### Exceptions
 
 The PLSSVM Python3 bindings define a few new exception types:
@@ -477,5 +607,6 @@ The PLSSVM Python3 bindings define a few new exception types:
 | `UnsupportedKernelTypeError` | If an unsupported target platform has been requested.                                                                  |
 | `GPUDevicePtrError`          | If something went wrong in one of the backend's GPU device pointers. **Note**: shouldn't occur in user code.           |
 | `MatrixError`                | If something went wrong in the internal matrix class. **Note**: shouldn't occur in user code.                          |
+| `HardwareSamplerError`       | If something during the hardware sampling went wrong. **Note**: only available if hardware sampling is available!      |
 
 Depending on the available backends, additional `BackendError`s are also available (e.g., `plssvm.cuda.BackendError`).

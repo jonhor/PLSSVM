@@ -13,13 +13,13 @@
 #define PLSSVM_DETAIL_LOGGING_HPP_
 #pragma once
 
-#include "plssvm/detail/performance_tracker.hpp"  // plssvm::detail::is_tracking_entry_v,
-                                                  // PLSSVM_PERFORMANCE_TRACKER_ENABLED, PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY
-#include "plssvm/verbosity_levels.hpp"            // plssvm::verbosity_level, plssvm::verbosity, bitwise-operators on plssvm::verbosity_level
+#include "plssvm/detail/tracking/performance_tracker.hpp"  // plssvm::detail::tracking::is_tracking_entry_v,
+                                                           // PLSSVM_PERFORMANCE_TRACKER_ENABLED, PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY
+#include "plssvm/verbosity_levels.hpp"                     // plssvm::verbosity_level, plssvm::verbosity, bitwise-operators on plssvm::verbosity_level
 
 #include "fmt/chrono.h"  // format std::chrono types
 #include "fmt/color.h"   // fmt::fg, fmt::color
-#include "fmt/format.h"  // fmt::format
+#include "fmt/format.h"  // fmt::format, fmt::runtime
 
 #include <iostream>     // std::cout, std::clog, std::flush
 #include <string_view>  // std::string_view
@@ -45,17 +45,17 @@ void log(const verbosity_level verb, const std::string_view msg, Args &&...args)
         // if the plssvm::verbosity_level is the warning level, output the message on stderr
         // otherwise output the message on stdout
         if ((verb & verbosity_level::warning) != verbosity_level::quiet) {
-            std::clog << fmt::format(fmt::fg(fmt::color::orange), msg, args...) << std::flush;
+            std::clog << fmt::format(fmt::runtime(msg), args...) << std::flush;
         } else {
-            std::cout << fmt::format(msg, args...) << std::flush;
+            std::cout << fmt::format(fmt::runtime(msg), args...) << std::flush;
         }
     }
 
     // if performance tracking has been enabled, add tracking entries
 #if defined(PLSSVM_PERFORMANCE_TRACKER_ENABLED)
     ([](auto &&arg) {
-        if constexpr (detail::is_tracking_entry_v<decltype(arg)>) {
-            PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY(std::forward<decltype(arg)>(arg));
+        if constexpr (detail::tracking::is_tracking_entry_v<decltype(arg)>) {
+            PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY(std::forward<decltype(arg)>(arg));
         }
     }(std::forward<Args>(args)),
      ...);

@@ -18,7 +18,7 @@
 
 #include "hip/hip_runtime_api.h"  // hipError_t, hipSuccess, hipGetErrorName, hipGetErrorString
 
-#include "fmt/core.h"     // fmt::formatter
+#include "fmt/base.h"     // fmt::formatter
 #include "fmt/ostream.h"  // fmt::ostream_formatter
 
 #include <string>  // std::string
@@ -75,6 +75,13 @@ void device_synchronize(int device);
  * @return the HIP runtime version (`[[nodiscard]]`)
  */
 [[nodiscard]] std::string get_runtime_version();
+
+/**
+ * @brief Get the HIP runtime string.
+ * @details Either HIP or CUDA depending on which runtimes was used during CMake.
+ * @return the used HIP runtime (`[[nodiscard]]`)
+ */
+[[nodiscard]] std::string get_runtime();
 
 }  // namespace plssvm::hip::detail
 

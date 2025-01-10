@@ -23,7 +23,7 @@
 #include "plssvm/parameter.hpp"                    // plssvm::parameter
 #include "plssvm/shape.hpp"                        // plssvm::shape
 
-#include "fmt/core.h"     // fmt::format
+#include "fmt/format.h"   // fmt::format
 #include "fmt/std.h"      // format std::vector<bool>::operator[] proxy type
 #include "gtest/gtest.h"  // FAIL
 
@@ -674,6 +674,24 @@ template <typename T, typename Tuple>
 [[nodiscard]] inline T construct_from_tuple(Tuple &&tuple) {
     return construct_from_tuple<T>(std::forward<Tuple>(tuple),
                                    std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>{});
+}
+
+/**
+ * @brief Count the number of occurrences of @p contained in @p string.
+ * @param[in] str the string to search
+ * @param[in] contained the string that should be searched for in @p str
+ * @return the number of occurrences (`[[nodiscard]]`)
+ */
+[[nodiscard]] inline std::size_t number_of_substring_occurrences(const std::string_view str, const std::string_view contained) {
+    std::size_t count{ 0 };
+    std::size_t pos = str.find(contained);
+
+    while (pos != std::string_view::npos) {
+        ++count;
+        pos = str.find(contained, pos + contained.size());
+    }
+
+    return count;
 }
 
 }  // namespace util

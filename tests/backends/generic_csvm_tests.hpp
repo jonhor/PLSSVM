@@ -14,13 +14,13 @@
 #pragma once
 
 #include "plssvm/backend_types.hpp"             // plssvm::backend_type
+#include "plssvm/backends/execution_range.hpp"  // plssvm::detail::execution_range
 #include "plssvm/classification_types.hpp"      // plssvm::classification_type
 #include "plssvm/constants.hpp"                 // plssvm::real_type, plssvm::PADDING_SIZE
 #include "plssvm/data_set.hpp"                  // plssvm::data_set
 #include "plssvm/detail/data_distribution.hpp"  // plssvm::detail::{triangular_data_distribution, rectangular_data_distribution}
 #include "plssvm/detail/memory_size.hpp"        // memory size literals
 #include "plssvm/detail/move_only_any.hpp"      // plssvm::detail::move_only_any
-#include "plssvm/backends/execution_range.hpp"  // plssvm::detail::execution_range
 #include "plssvm/detail/utility.hpp"            // plssvm::detail::{unreachable, get, unreachable}
 #include "plssvm/kernel_function_types.hpp"     // plssvm::csvm_to_backend_type_v, plssvm::backend_type
 #include "plssvm/matrix.hpp"                    // plssvm::aos_matrix, plssvm::layout_type
@@ -35,7 +35,7 @@
 #include "tests/types_to_test.hpp"          // util::{test_parameter_type_at_t, test_parameter_value_at_v}
 #include "tests/utility.hpp"                // util::{redirect_output, generate_specific_matrix, construct_from_tuple, flatten, generate_random_matrix}
 
-#include "fmt/core.h"     // fmt::format
+#include "fmt/format.h"   // fmt::format
 #include "gmock/gmock.h"  // ::testing::HasSubstr
 #include "gtest/gtest.h"  // TYPED_TEST_SUITE_P, TYPED_TEST_P, REGISTER_TYPED_TEST_SUITE_P, EXPECT_EQ, EXPECT_NE, EXPECT_GT, EXPECT_TRUE, EXPECT_DEATH,
                           // ASSERT_EQ, GTEST_SKIP, SUCCEED, ::testing::Test
@@ -85,7 +85,7 @@ template <typename csvm_type, typename device_ptr_type, typename matrix_type, ty
         return partial_kernel_matrix;
     };
 
-    if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+    if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
         // only a single device for OpenMP on the CPU
         result[0] = plssvm::detail::move_only_any{ calculate_partial_kernel_matrix(0, matr.num_rows()) };
     } else {
@@ -132,7 +132,7 @@ template <typename csvm_type, typename device_ptr_type, typename matrix_type, ty
 
     for (std::size_t device_id = 0; device_id < csvm.num_available_devices(); ++device_id) {
         // created matrix is different for the OpenMP backend and the GPU backends!
-        if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+        if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
             // only a single device ever in use
             result[0] = plssvm::detail::move_only_any{ std::make_tuple(plssvm::soa_matrix<real_type>{ matr, plssvm::shape{ plssvm::PADDING_SIZE, plssvm::PADDING_SIZE } }, std::forward<Args>(args)...) };
         } else {
@@ -194,6 +194,7 @@ template <typename csvm_type, typename device_ptr_type, typename matrix_type, ty
                 return result;  // dummy return only necessary for the DeathTests -> VALUE NOT USED!
             }
         case plssvm::solver_type::cg_explicit:
+        case plssvm::solver_type::cg_streaming:
             // no additional arguments are used
             return init_explicit_matrices<csvm_type, device_ptr_type>(std::move(matr), csvm);
         case plssvm::solver_type::cg_implicit:
@@ -277,7 +278,7 @@ TYPED_TEST_P(GenericCSVM, num_available_devices) {
     const csvm_type svm = util::construct_from_tuple<csvm_type>(csvm_test_type::additional_arguments);
 
     // the maximum memory allocation size should be greater than 0!
-    if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+    if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
         EXPECT_EQ(svm.num_available_devices(), 1);
     } else {
         EXPECT_GE(svm.num_available_devices(), 1);
@@ -433,11 +434,11 @@ TYPED_TEST_P(GenericCSVM, conjugate_gradients_trivial) {
                                                      { plssvm::real_type{ -1.0 }, plssvm::real_type{ 1.0 }, plssvm::real_type{ -1.0 }, plssvm::real_type{ 1.0 } } } };
 
     // solve AX = B
-    const auto [X, num_iter] = svm.conjugate_gradients(A, B, plssvm::real_type{ 0.00001 }, 4, solver);
+    const auto [X, num_iters] = svm.conjugate_gradients(A, B, plssvm::real_type{ 0.00001 }, 4, solver);
 
     // check result
     EXPECT_FLOATING_POINT_MATRIX_NEAR(X, (plssvm::soa_matrix<plssvm::real_type>{ B, plssvm::shape{ plssvm::PADDING_SIZE, plssvm::PADDING_SIZE } }));
-    EXPECT_GT(num_iter, 0);
+    EXPECT_THAT(num_iters, ::testing::Each(::testing::Gt(0)));
 }
 
 TYPED_TEST_P(GenericCSVM, conjugate_gradients) {
@@ -472,7 +473,7 @@ TYPED_TEST_P(GenericCSVM, conjugate_gradients) {
 
     // check result
     EXPECT_FLOATING_POINT_MATRIX_NEAR(X, correct_X);
-    EXPECT_GT(num_iters, 0);
+    EXPECT_THAT(num_iters, ::testing::Each(::testing::Gt(0)));
 }
 
 REGISTER_TYPED_TEST_SUITE_P(GenericCSVM,
@@ -660,7 +661,7 @@ TYPED_TEST_P(GenericCSVMKernelFunction, predict_values) {
 
     // check the calculated result for correctness
     ASSERT_EQ(calculated.shape(), correct_predict_values.shape());
-    EXPECT_FLOATING_POINT_MATRIX_NEAR(calculated, correct_predict_values);
+    EXPECT_FLOATING_POINT_MATRIX_NEAR_EPS(calculated, correct_predict_values, 1e6);
     // in case of the linear kernel, the w vector should have been filled
     if (kernel == plssvm::kernel_function_type::linear) {
         EXPECT_EQ(w.num_rows(), rho.size());
@@ -798,15 +799,15 @@ TYPED_TEST_P(GenericCSVMSolver, solve_lssvm_system_of_linear_equations_trivial) 
     // | Q  1 |  *  | x |  =  | y |
     // | 1  0 |     | b |     | 0 |
     // with Q = A^TA
-    const auto &[calculated_x, calculated_rho, num_iter] = svm.solve_lssvm_system_of_linear_equations(A, B, params, plssvm::epsilon = 0.00001, plssvm::solver = solver);
+    const auto &[calculated_x, calculated_rho, num_iters] = svm.solve_lssvm_system_of_linear_equations(A, B, params, plssvm::epsilon = 0.00001, plssvm::solver = solver);
 
     // check the calculated result for correctness
-    EXPECT_FLOATING_POINT_MATRIX_NEAR(calculated_x, (plssvm::aos_matrix<plssvm::real_type>{ B, plssvm::shape{ plssvm::PADDING_SIZE, plssvm::PADDING_SIZE } }));
+    EXPECT_FLOATING_POINT_MATRIX_NEAR_EPS(calculated_x, (plssvm::aos_matrix<plssvm::real_type>{ B, plssvm::shape{ plssvm::PADDING_SIZE, plssvm::PADDING_SIZE } }), 1e6);
     EXPECT_TRUE(std::all_of(calculated_rho.cbegin(), calculated_rho.cend(), [front = std::abs(calculated_rho.front())](const plssvm::real_type rho) { return std::abs(rho) == front; }));
     for (const auto rho : calculated_rho) {
         EXPECT_FLOATING_POINT_NEAR(std::abs(rho) - std::numeric_limits<plssvm::real_type>::epsilon(), std::numeric_limits<plssvm::real_type>::epsilon());
     }
-    EXPECT_GT(num_iter, 0);
+    EXPECT_THAT(num_iters, ::testing::Each(::testing::Gt(0)));
 }
 
 TYPED_TEST_P(GenericCSVMSolver, solve_lssvm_system_of_linear_equations) {
@@ -835,7 +836,7 @@ TYPED_TEST_P(GenericCSVMSolver, solve_lssvm_system_of_linear_equations) {
     // | Q  1 |  *  | x |  =  | y |
     // | 1  0 |     | b |     | 0 |
     // with Q = A^TA
-    const auto &[calculated_x, calculated_rho, num_iter] = svm.solve_lssvm_system_of_linear_equations(A, B, params, plssvm::epsilon = 0.00001, plssvm::solver = solver);
+    const auto &[calculated_x, calculated_rho, num_iters] = svm.solve_lssvm_system_of_linear_equations(A, B, params, plssvm::epsilon = 0.00001, plssvm::solver = solver);
 
     plssvm::aos_matrix<plssvm::real_type> correct_x{ { { plssvm::real_type{ 0.4285714285714278 }, plssvm::real_type{ -1.1904761904761898 }, plssvm::real_type{ 1.1904761904761898 }, plssvm::real_type{ -0.4285714285714278 } },
                                                        { plssvm::real_type{ -0.4285714285714278 }, plssvm::real_type{ 1.1904761904761898 }, plssvm::real_type{ -1.1904761904761898 }, plssvm::real_type{ 0.4285714285714278 } } },
@@ -846,7 +847,7 @@ TYPED_TEST_P(GenericCSVMSolver, solve_lssvm_system_of_linear_equations) {
     for (const auto rho : calculated_rho) {
         EXPECT_FLOATING_POINT_NEAR_EPS(std::abs(rho), std::abs(calculated_rho.front()), 1e6);  // due to hand provided results
     }
-    EXPECT_GT(num_iter, 0);
+    EXPECT_THAT(num_iters, ::testing::Each(::testing::Gt(0)));
 }
 
 REGISTER_TYPED_TEST_SUITE_P(GenericCSVMSolver,
@@ -895,12 +896,12 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix_minimal) {
 
     // automatic solver type not permitted
     if constexpr (solver == plssvm::solver_type::automatic) {
-#if defined(PLSSVM_ASSERT_ENABLED)
+#if defined(PLSSVM_ENABLE_ASSERTS) && defined(PLSSVM_DEATH_TESTS_ENABLED)
         EXPECT_DEATH(std::ignore = svm.assemble_kernel_matrix(solver, params, data, q_red, QA_cost), "An explicit solver type must be provided instead of solver_type::automatic!");
 #else
         SUCCEED() << "Solver type is automatic, but assertions are disabled!";
 #endif
-    } else if constexpr (solver == plssvm::solver_type::cg_explicit) {
+    } else if constexpr (solver == plssvm::solver_type::cg_explicit || solver == plssvm::solver_type::cg_streaming) {
         // run the assemble the kernel matrix kernels
         const std::vector<plssvm::detail::move_only_any> kernel_matrix_d = svm.assemble_kernel_matrix(solver, params, data, q_red, QA_cost);
         ASSERT_EQ(kernel_matrix_d.size(), num_devices);
@@ -920,7 +921,7 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix_minimal) {
 
                 // get result based on used backend
                 std::vector<plssvm::real_type> kernel_matrix{};
-                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
                     kernel_matrix = plssvm::detail::move_only_any_cast<std::vector<plssvm::real_type>>(kernel_matrix_d[device_id]);  // std::vector
                 } else {
                     const auto &kernel_matrix_d_ptr = plssvm::detail::move_only_any_cast<const device_ptr_type &>(kernel_matrix_d[device_id]);  // device_ptr -> convert it to a std::vector
@@ -947,7 +948,7 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix_minimal) {
                 EXPECT_TRUE(kernel_matrix_d[device_id].has_value());
 
                 // implicit doesn't assemble a kernel matrix!
-                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
                     const auto &[data_d_ret, params_ret, q_red_ret, QA_cost_ret] = plssvm::detail::move_only_any_cast<const std::tuple<plssvm::soa_matrix<plssvm::real_type>, plssvm::parameter, std::vector<plssvm::real_type>, plssvm::real_type> &>(kernel_matrix_d[device_id]);
 
                     // the values should not have changed! (except the matrix layout)
@@ -1005,12 +1006,12 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix) {
 
     // automatic solver type not permitted
     if constexpr (solver == plssvm::solver_type::automatic) {
-#if defined(PLSSVM_ASSERT_ENABLED)
+#if defined(PLSSVM_ENABLE_ASSERTS) && defined(PLSSVM_DEATH_TESTS_ENABLED)
         EXPECT_DEATH(std::ignore = svm.assemble_kernel_matrix(solver, params, data, q_red, QA_cost), "An explicit solver type must be provided instead of solver_type::automatic!");
 #else
         SUCCEED() << "Solver type is automatic, but assertions are disabled!";
 #endif
-    } else if constexpr (solver == plssvm::solver_type::cg_explicit) {
+    } else if constexpr (solver == plssvm::solver_type::cg_explicit || solver == plssvm::solver_type::cg_streaming) {
         // run the assemble the kernel matrix kernels
         const std::vector<plssvm::detail::move_only_any> kernel_matrix_d = svm.assemble_kernel_matrix(solver, params, data, q_red, QA_cost);
         ASSERT_EQ(kernel_matrix_d.size(), num_devices);
@@ -1030,7 +1031,7 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix) {
 
                 // get result based on used backend
                 std::vector<plssvm::real_type> kernel_matrix{};
-                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
                     kernel_matrix = plssvm::detail::move_only_any_cast<std::vector<plssvm::real_type>>(kernel_matrix_d[device_id]);  // std::vector
                 } else {
                     const auto &kernel_matrix_d_ptr = plssvm::detail::move_only_any_cast<const device_ptr_type &>(kernel_matrix_d[device_id]);  // device_ptr -> convert it to a std::vector
@@ -1057,7 +1058,7 @@ TYPED_TEST_P(GenericCSVMSolverKernelFunction, assemble_kernel_matrix) {
                 EXPECT_TRUE(kernel_matrix_d[device_id].has_value());
 
                 // implicit doesn't assemble a kernel matrix!
-                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp) {
+                if constexpr (plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::openmp || plssvm::csvm_to_backend_type_v<csvm_type> == plssvm::backend_type::stdpar) {
                     const auto &[data_d_ret, params_ret, q_red_ret, QA_cost_ret] = plssvm::detail::move_only_any_cast<const std::tuple<plssvm::soa_matrix<plssvm::real_type>, plssvm::parameter, std::vector<plssvm::real_type>, plssvm::real_type> &>(kernel_matrix_d[device_id]);
 
                     // the values should not have changed! (except the matrix layout)

@@ -25,7 +25,7 @@ TEST(SYCLImplementationType, to_string) {
 }
 
 TEST(SYCLImplementationType, to_string_unknown) {
-    // check conversions to std::string from unknown file_format_type
+    // check conversions to std::string from unknown implementation_type
     EXPECT_CONVERSION_TO_STRING(static_cast<plssvm::sycl::implementation_type>(3), "unknown");
 }
 
@@ -34,6 +34,8 @@ TEST(SYCLImplementationType, from_string) {
     // check conversion from std::string
     EXPECT_CONVERSION_FROM_STRING("automatic", plssvm::sycl::implementation_type::automatic);
     EXPECT_CONVERSION_FROM_STRING("AUTOMATIC", plssvm::sycl::implementation_type::automatic);
+    EXPECT_CONVERSION_FROM_STRING("auto", plssvm::sycl::implementation_type::automatic);
+    EXPECT_CONVERSION_FROM_STRING("AUTO", plssvm::sycl::implementation_type::automatic);
     EXPECT_CONVERSION_FROM_STRING("AdaptiveCpp", plssvm::sycl::implementation_type::adaptivecpp);
     EXPECT_CONVERSION_FROM_STRING("ADAPTIVECPP", plssvm::sycl::implementation_type::adaptivecpp);
     EXPECT_CONVERSION_FROM_STRING("ACPP", plssvm::sycl::implementation_type::adaptivecpp);
@@ -46,7 +48,7 @@ TEST(SYCLImplementationType, from_string) {
 }
 
 TEST(SYCLImplementationType, from_string_unknown) {
-    // foo isn't a valid file_format_type
+    // foo isn't a valid implementation_type
     std::istringstream input{ "foo" };
     plssvm::sycl::implementation_type impl{};
     input >> impl;

@@ -14,7 +14,7 @@ using linalg::matrix_view, linalg::matrix, linalg::matrix_type;
 
 class cholesky_preconditioner : public sycl_preconditioner {
     cholesky_preconditioner(::sycl::queue &queue, matrix<matrix_type::upper> &&M) :
-        sycl_preconditio  // TODO amd else memory is not nulledner(queue),
+        sycl_preconditioner(queue),
         M_(std::move(M)),
         MT_(linalg::transposed(queue, M_)) { }
 

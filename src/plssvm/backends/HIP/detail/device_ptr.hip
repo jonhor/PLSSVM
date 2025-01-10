@@ -7,8 +7,8 @@
  */
 
 #include "plssvm/backends/HIP/detail/device_ptr.hip.hpp"
+// main header
 
-#include "plssvm/backends/gpu_device_ptr.hpp"                     // plssvm::detail::gpu_device_ptr
 #include "plssvm/backends/HIP/detail/utility.hip.hpp"             // PLSSVM_HIP_ERROR_CHECK, plssvm::hip::detail::get_device_count
 #include "plssvm/backends/HIP/exceptions.hpp"                     // plssvm::hip::backend_exception
 #include "plssvm/backends/HIP/kernel/detail/fill_kernel.hip.hpp"  // plssvm::hip::detail::fill_array
@@ -16,34 +16,38 @@
 #include "plssvm/exceptions/exceptions.hpp"                       // plssvm::exception
 #include "plssvm/shape.hpp"                                       // plssvm::shape
 
+#include "hip/driver_types.h"     // hipMemcpyHostToDevice, hipMemcpyDeviceToHost, hipMemcpyDeviceToDevice
 #include "hip/hip_runtime_api.h"  // HIP runtime functions
-#include "hip/driver_types.h"  // hipMemcpyHostToDevice, hipMemcpyDeviceToHost, hipMemcpyDeviceToDevice
 
-#include "fmt/core.h"  // fmt::format
+#include "fmt/format.h"  // fmt::format
 
-#include <cstddef>  // std::size_t
 #include <algorithm>  // std::min
+#include <cstddef>    // std::size_t
 #include <exception>  // std::terminate
 #include <iostream>   // std::cerr, std::endl
 
 namespace plssvm::hip::detail {
 
 template <typename T>
-device_ptr<T>::device_ptr(const size_type size, const queue_type device) :
-    device_ptr{ plssvm::shape{ size, 1 }, plssvm::shape{ 0, 0 }, device } { }
+device_ptr<T>::device_ptr(const size_type size, const queue_type device, const bool use_usm_allocations) :
+    device_ptr{ plssvm::shape{ size, 1 }, plssvm::shape{ 0, 0 }, device, use_usm_allocations } { }
 
 template <typename T>
-device_ptr<T>::device_ptr(const plssvm::shape shape, const queue_type device) :
-    device_ptr{ shape, plssvm::shape{ 0, 0 }, device } { }
+device_ptr<T>::device_ptr(const plssvm::shape shape, const queue_type device, const bool use_usm_allocations) :
+    device_ptr{ shape, plssvm::shape{ 0, 0 }, device, use_usm_allocations } { }
 
 template <typename T>
-device_ptr<T>::device_ptr(const plssvm::shape shape, const plssvm::shape padding, const queue_type device) :
-    base_type{ shape, padding, device } {
+device_ptr<T>::device_ptr(const plssvm::shape shape, const plssvm::shape padding, const queue_type device, const bool use_usm_allocations) :
+    base_type{ shape, padding, device, use_usm_allocations } {
     if (queue_ < 0 || queue_ >= static_cast<int>(get_device_count())) {
         throw backend_exception{ fmt::format("Illegal device ID! Must be in range: [0, {}) but is {}.", get_device_count(), queue_) };
     }
     detail::set_device(queue_);
-    PLSSVM_HIP_ERROR_CHECK(hipMalloc(&data_, this->size_padded() * sizeof(value_type)))
+    if (use_usm_allocations_) {
+        PLSSVM_HIP_ERROR_CHECK(hipMallocManaged(&data_, this->size_padded() * sizeof(value_type)))
+    } else {
+        PLSSVM_HIP_ERROR_CHECK(hipMalloc(&data_, this->size_padded() * sizeof(value_type)))
+    }
     this->memset(0);
 }
 

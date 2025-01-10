@@ -25,6 +25,9 @@
 #if defined(PLSSVM_HAS_OPENMP_BACKEND)
     #include "plssvm/backends/OpenMP/csvm.hpp"  // plssvm::openmp::csvm, plssvm::csvm_backend_exists_v
 #endif
+#if defined(PLSSVM_HAS_STDPAR_BACKEND)
+    #include "plssvm/backends/stdpar/csvm.hpp"  // plssvm::stdpar::csvm, plssvm::csvm_backend_exists_v
+#endif
 #if defined(PLSSVM_HAS_CUDA_BACKEND)
     #include "plssvm/backends/CUDA/csvm.hpp"  // plssvm::cuda::csvm, plssvm::csvm_backend_exists_v
 #endif
@@ -43,7 +46,7 @@
     #endif
 #endif
 
-#include "fmt/core.h"     // fmt::format
+#include "fmt/format.h"   // fmt::format
 #include "igor/igor.hpp"  // igor::parser, igor::has_unnamed_arguments
 
 #include <memory>       // std::unique_ptr, std::make_unique
@@ -125,6 +128,8 @@ template <typename... Args>
             return make_csvm_impl(determine_default_backend(), std::forward<Args>(args)...);
         case backend_type::openmp:
             return make_csvm_default_impl<openmp::csvm>(std::forward<Args>(args)...);
+        case backend_type::stdpar:
+            return make_csvm_default_impl<stdpar::csvm>(std::forward<Args>(args)...);
         case backend_type::cuda:
             return make_csvm_default_impl<cuda::csvm>(std::forward<Args>(args)...);
         case backend_type::hip:
@@ -153,8 +158,8 @@ template <typename... Args>
  * @return the C-SVM (`[[nodiscard]]`)
  */
 template <typename... Args>
-[[nodiscard]] inline std::unique_ptr<csvm> make_csvm(const backend_type backend, Args &&...args) {
-    return detail::make_csvm_impl(backend, std::forward<Args>(args)...);
+[[nodiscard]] inline std::unique_ptr<csvm> make_csvm(const backend_type backend, Args ...args) {
+    return detail::make_csvm_impl(backend, args...);
 }
 
 /**
@@ -165,8 +170,8 @@ template <typename... Args>
  * @return the C-SVM (`[[nodiscard]]`)
  */
 template <typename... Args>
-[[nodiscard]] inline std::unique_ptr<csvm> make_csvm(Args &&...args) {
-    return detail::make_csvm_impl(backend_type::automatic, std::forward<Args>(args)...);
+[[nodiscard]] inline std::unique_ptr<csvm> make_csvm(Args ...args) {
+    return detail::make_csvm_impl(backend_type::automatic, args...);
 }
 
 }  // namespace plssvm

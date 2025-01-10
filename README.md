@@ -34,7 +34,7 @@ To predict to which class a new, unseen data point belongs, the SVM simply has t
 This is very efficient since it only involves a single scalar product of the size corresponding to the numer of features of the data set.
 
 <p align="center">
-  <img alt="strong scaling CPU" src=".figures/support_vector_machine.png" width="50%">
+  <img alt="Basic idea of an Support Vector Machine as classification model." src=".figures/support_vector_machine.png" width="50%">
 </p>
 
 However, normal SVMs suffer in their potential parallelizability.
@@ -55,13 +55,16 @@ We decided to use the [Conjugate Gradient (CG)](https://en.wikipedia.org/wiki/Co
 
 The main highlights of our SVM implementations are:
 1. Drop-in replacement for LIBSVM's `svm-train`, `svm-predict`, and `svm-scale` (some features currently not implemented).
-2. Support of multiple different programming frameworks for parallelisation (also called backends in our PLSSVM implementation) which allows us to target GPUs and CPUs from different vendors like NVIDIA, AMD, or Intel:
+2. Support of multiple different programming frameworks for parallelization (also called backends in our PLSSVM implementation) which allows us to target GPUs and CPUs from different vendors like NVIDIA, AMD, or Intel:
    - [OpenMP](https://www.openmp.org/)
+   - [stdpar](https://en.cppreference.com/w/cpp/algorithm) (supported implementations are [nvc++](https://developer.nvidia.com/hpc-sdk) from NVIDIA's HPC SDK, [roc-stdpar](https://github.com/ROCm/roc-stdpar) as a patched LLVM, [icpx](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html) as Intel's oneAPI compiler, [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp), and [GNU GCC](https://gcc.gnu.org/) using TBB). <br>
+     **Note**: due to the nature of the used USM mechanics in the `stdpar` implementations, the `stdpar` backend **can't** be enabled together with **any** other backend! <br>
+     **Note**: since every translation units need to be compiled with the same flag, we currently globally set `CMAKE_CXX_FLAGS` although it's discouraged in favor of `target_compile_options`.
    - [CUDA](https://developer.nvidia.com/cuda-zone)
    - [HIP](https://github.com/ROCm-Developer-Tools/HIP) (only tested on AMD GPUs)
    - [OpenCL](https://www.khronos.org/opencl/)
-   - [SYCL](https://www.khronos.org/sycl/) (supported implementations are [DPC++](https://github.com/intel/llvm) and [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp) (formerly known as hipSYCL); specifically the versions [sycl-nightly/20231201](https://github.com/intel/llvm/tree/sycl-nightly/20230110) and AdaptiveCpp release [v23.10.0](https://github.com/AdaptiveCpp/AdaptiveCpp/releases/tag/v23.10.0))
-3. Six different kernel functions to be able to classify a large variaty of different problems:
+   - [SYCL](https://www.khronos.org/sycl/) (supported implementations are [DPC++](https://github.com/intel/llvm) and [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp) (formerly known as hipSYCL); specifically the versions [sycl-nightly/20231201](https://github.com/intel/llvm/tree/sycl-nightly/20230110) and AdaptiveCpp release [v24.06.0](https://github.com/AdaptiveCpp/AdaptiveCpp/releases/tag/v23.10.0))
+3. Six different kernel functions to be able to classify a large variety of different problems:
    - linear: $\vec{u}^T \cdot \vec{v}$
    - polynomial: $(\gamma \cdot \vec{u}^T \cdot \vec{v} + coef0)^{d}$
    - radial basis function (rbf): $\exp(-\gamma \cdot |\vec{u} - \vec{v}|^2)$
@@ -74,7 +77,7 @@ The main highlights of our SVM implementations are:
 5. Multi-class classification available via one vs. all (also one vs. rest or OAA) and one vs. one (also OAO):
    - OAA: one huge classification task where our CG algorithm solves a system of linear equations with multiple right-hand sides. The resulting model file is **not** compatible with LIBSVM.
    - OAO: constructs many but smaller binary classifications. The resulting model file is **fully** compatible with LIBSVM.
-6. Multi-GPU support for **all** kernel functions and GPU backends for `fit` as well as `predict/score`.
+6. Multi-GPU support for **all** kernel functions and GPU backends for `fit` as well as `predict/score` (**note**: no multi-GPU support for the stdpar backend even if run on a GPU!).
 7. Python bindings as drop-in replacement for `sklearn.SVC` (some features currently not implemented).
 
 
@@ -86,16 +89,20 @@ General dependencies:
 
 - a C++17 capable compiler (e.g. [`gcc`](https://gcc.gnu.org/) or [`clang`](https://clang.llvm.org/))
 - [CMake](https://cmake.org/) 3.23 or newer
-- [cxxopts ≥ v3.2.0](https://github.com/jarro2783/cxxopts), [fast_float ≥ v6.1.1](https://github.com/fastfloat/fast_float), [{fmt} ≥ v10.2.1](https://github.com/fmtlib/fmt), and [igor](https://github.com/bluescarni/igor) (all four are automatically build during the CMake configuration if they couldn't be found using the respective `find_package` call)
-- [GoogleTest ≥ v1.14.0](https://github.com/google/googletest) if testing is enabled (automatically build during the CMake configuration if `find_package(GTest)` wasn't successful)
+- [cxxopts ≥ v3.2.0](https://github.com/jarro2783/cxxopts), [fast_float ≥ v6.1.3](https://github.com/fastfloat/fast_float), [{fmt} ≥ v11.0.2](https://github.com/fmtlib/fmt), and [igor](https://github.com/bluescarni/igor) (all four are automatically build during the CMake configuration if they couldn't be found using the respective `find_package` call)
+- [GoogleTest ≥ v1.15.2](https://github.com/google/googletest) if testing is enabled (automatically build during the CMake configuration if `find_package(GTest)` wasn't successful)
 - [doxygen](https://www.doxygen.nl/index.html) if documentation generation is enabled
-- [Pybind11 ≥ v2.12.0](https://github.com/pybind/pybind11) if Python bindings are enabled
+- [Pybind11 ≥ v2.13.3](https://github.com/pybind/pybind11) if Python bindings are enabled
 - [OpenMP](https://www.openmp.org/) 4.0 or newer (optional) to speed-up library utilities (like file parsing)
 - multiple Python modules used in the utility scripts, to install all modules use `pip install --user -r install/python_requirements.txt`
 
 Additional dependencies for the OpenMP backend:
 
 - compiler with OpenMP support
+
+Additional dependencies for the stdpar backend:
+
+- compiler with stdpar support
 
 Additional dependencies for the CUDA backend:
 
@@ -113,11 +120,29 @@ Additional dependencies for the OpenCL backend:
 
 Additional dependencies for the SYCL backend:
 
-- the code must be compiled with a SYCL capable compiler; currently tested with [DPC++](https://github.com/intel/llvm) and [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp)
+- the code must be compiled with a SYCL capable compiler; currently supported are [DPC++](https://github.com/intel/llvm) and [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp)
+
+Additional dependencies for the stdpar backend:
+
+- the code must be compiled with a stdpar capable compiler; currently supported are [nvc++](https://developer.nvidia.com/hpc-sdk), [roc-stdpar](https://github.com/ROCm/roc-stdpar), [icpx](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html), [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp), and [GNU GCC](https://gcc.gnu.org/))
+- depending on the used stdpar implementation, additional dependencies are required:
+    
+    - `nvc++`: a CUDA SDK
+    - `roc-stdpar`: a HIP installation; it may be necessary to set `export HSA_XNACK=1` (e.g., if the error `Memory access fault by GPU node-2` occurs)
+    - `icpx`: Intel's [oneDPL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-library.html) library
+    - `AdaptiveCpp`: Intel's [TBB](https://github.com/wjakob/tbb) library
+    - `GNU GCC`: [Boost ≥ 1.73.0](https://www.boost.org/) with the `atomic` library enabled and Intel's [TBB](https://github.com/wjakob/tbb) library
 
 Additional dependencies if `PLSSVM_ENABLE_TESTING` and `PLSSVM_GENERATE_TEST_FILE` are both set to `ON`:
 
 - [Python3](https://www.python.org/) with the [`argparse`](https://docs.python.org/3/library/argparse.html), [`timeit`](https://docs.python.org/3/library/timeit.html), [`sklearn`](https://scikit-learn.org/stable/), and [`humanize`](https://pypi.org/project/humanize/) modules
+
+Additional dependencies if `PLSSVM_ENABLE_PERFORMANCE_TRACKING` and `PLSSVM_ENABLE_HARDWARE_SAMPLING` are both set to `ON`:
+
+- if a CPU should be targeted (or **optionally** for all targets): at least one of [`turbostat`](https://www.linux.org/docs/man8/turbostat.html) (may require root privileges), [`lscpu`](https://man7.org/linux/man-pages/man1/lscpu.1.html), or [`free`](https://man7.org/linux/man-pages/man1/free.1.html) and the [`subprocess.h`](https://github.com/sheredom/subprocess.h) library (automatically build during the CMake configuration if they couldn't be found using the respective `find_package` call)
+- if an NVIDIA GPU should be targeted: NVIDIA's Management Library [`NVML`](https://docs.nvidia.com/deploy/nvml-api/)
+- if an AMD GPU should be targeted: AMD's ROCm SMI library [`rocm_smi_lib`](https://rocm.docs.amd.com/projects/rocm_smi_lib/en/latest/doxygen/html/modules.html)
+- if an Intel GPU should be targeted: Intel's [`Level Zero library`](https://spec.oneapi.io/level-zero/latest/core/INTRO.html)
 
 ### Building PLSSVM
 
@@ -215,6 +240,11 @@ The `[optional_options]` can be one or multiple of:
   - `AUTO`: check for the OpenMP backend but **do not** fail if not available
   - `OFF`: do not check for the OpenMP backend
 
+- `PLSSVM_ENABLE_STDPAR_BACKEND=ON|OFF|AUTO` (default: `AUTO`):
+    - `ON`: check for the stdpar backend and fail if not available
+    - `AUTO`: check for the stdpar backend but **do not** fail if not available
+    - `OFF`: do not check for the stdpar backend
+
 - `PLSSVM_ENABLE_CUDA_BACKEND=ON|OFF|AUTO` (default: `AUTO`):
   - `ON`: check for the CUDA backend and fail if not available
   - `AUTO`: check for the CUDA backend but **do not** fail if not available
@@ -238,7 +268,7 @@ The `[optional_options]` can be one or multiple of:
 **Attention:** at least one backend must be enabled and available!
 
 - `PLSSVM_ENABLE_FAST_MATH=ON|OFF` (default depending on `CMAKE_BUILD_TYPE`: `ON` for Release or RelWithDebInfo, `OFF` otherwise): enable `fast-math` compiler flags for all backends
-- `PLSSVM_ENABLE_ASSERTS=ON|OFF` (default: `OFF`): enables custom assertions regardless whether the `DEBUG` macro is defined or not
+- `PLSSVM_ENABLE_ASSERTS=ON|OFF` (default: `OFF`): enables custom assertions
 - `PLSSVM_USE_FLOAT_AS_REAL_TYPE=ON|OFF` (default: `OFF`): use `float` as real_type instead of `double`
 - `PLSSVM_THREAD_BLOCK_SIZE` (default: `8`): set a specific thread block size used in the GPU kernels (for fine-tuning optimizations)
 - `PLSSVM_INTERNAL_BLOCK_SIZE` (default: `4`): set a specific internal block size used in the GPU kernels (for fine-tuning optimizations)
@@ -250,12 +280,24 @@ The `[optional_options]` can be one or multiple of:
 - `PLSSVM_ENABLE_LANGUAGE_BINDINGS=ON|OFF` (default: `OFF`): enable language bindings
 - `PLSSVM_STL_DEBUG_MODE_FLAGS=ON|OFF` (default: `OFF`): enable STL debug modes (**note**: changes the resulting library's ABI!)
 
-If `PLSSVM_ENABLE_TESTING` is set to `ON`, the following options can also be set:
+If `PLSSVM_ENABLE_TESTING` is set to `ON`, the following option can also be set:
 
 - `PLSSVM_GENERATE_TEST_FILE=ON|OFF` (default: `ON`): automatically generate test files
-  - `PLSSVM_TEST_FILE_NUM_DATA_POINTS` (default: `5000`): the number of data points in the test file
-  - `PLSSVM_TEST_FILE_NUM_FEATURES` (default: `2000`): the number of features per data point in the test file
-  - `PLSSVM_TEST_FILE_NUM_CLASSES` (default: `4`): the number of classes in the test file
+
+If `PLSSVM_GENERATE_TEST_FILE` is set to `ON`, the following options can also be set:
+
+- `PLSSVM_TEST_FILE_NUM_DATA_POINTS` (default: `5000`): the number of data points in the test file
+- `PLSSVM_TEST_FILE_NUM_FEATURES` (default: `2000`): the number of features per data point in the test file
+- `PLSSVM_TEST_FILE_NUM_CLASSES` (default: `4`): the number of classes in the test file
+
+If `PLSSVM_ENABLE_PERFORMANCE_TRACKING` is set to `ON`, the following option can also be set:
+
+- `PLSSVM_ENABLE_HARDWARE_SAMPLING=ON|OFF` (default: `OFF`): enable hardware sampling like current clock frequencies, memory usage, or power draw
+
+If `PLSSVM_ENABLE_HARDWARE_SAMPLING` is set to `ON`, the following options can also be set:
+
+- `PLSSVM_HARDWARE_SAMPLING_ENABLE_ERROR_CHECKS=ON|OFF` (default: `OFF`): enable some runtime error checks for the hardware sampling libraries
+- `PLSSVM_HARDWARE_SAMPLING_INTERVAL` (default: `100`): the sampling interval for the `plssvm-train`, `plssvm-predict`, and `plssvm-scale` executables in **milliseconds**
 
 If `PLSSVM_ENABLE_LANGUAGE_BINDINGS` is set to `ON`, the following option can also be set:
 
@@ -298,6 +340,10 @@ If more than one SYCL implementation is available the environment variables `PLS
 
 - `PLSSVM_SYCL_BACKEND_PREFERRED_IMPLEMENTATION` (`dpcpp`|`adaptivecpp`): specify the preferred SYCL implementation if the `sycl_implementation_type` option is set to `automatic`; additional the specified SYCL implementation is used in the `plssvm::sycl` namespace, the other implementations are available in the `plssvm::dpcpp` and `plssvm::adaptivecpp` namespace respectively
 
+If the stdpar backend is available, an additional options can be set.
+
+- `PLSSVM_STDPAR_BACKEND_IMPLEMENTATION` (default: `AUTO`): explicitly specify the used stdpar implementation; must be one of: `AUTO`, `NVHPC`, `roc-stdpar`, `IntelLLVM`, `ACPP`, `GNU_TBB`.
+
 ### Running the Tests
 
 To run the tests after building the library (with `PLSSVM_ENABLE_TESTING` set to `ON`) use:
@@ -307,6 +353,12 @@ ctest
 ```
 
 **Note:** due to floating point inaccuracies, it is advisable to disable `PLSSVM_ENABLE_FAST_MATH` for testing.
+
+**Note:** GoogleTest's death tests are currently not supported in conjunction with the stdpar backend. If you wish to use test with stdpar, you have to set `PLSSVM_ENABLE_ASSERTS` to `OFF`.
+
+**Note:** If the used stdpar implementation is `nvc++`, `PLSSVM_ENABLE_PERFORMANCE_TRACKING` must be set to `OFF` in order to run the tests.
+
+**Note:** the stdpar tests may fail if executed in parallel via `ctest -j $(nproc)`.
 
 ### Generating Test Coverage Results
 
@@ -416,7 +468,7 @@ Usage:
   -i, --max_iter arg            set the maximum number of CG iterations (default: num_features)
   -l, --solver arg              choose the solver: automatic|cg_explicit|cg_implicit (default: automatic)
   -a, --classification arg      the classification strategy to use for multi-class classification: oaa|oao (default: oaa)
-  -b, --backend arg             choose the backend: automatic|openmp|cuda|hip|opencl|sycl (default: automatic)
+  -b, --backend arg             choose the backend: automatic|openmp|cuda|hip|opencl|sycl|stdpar (default: automatic)
   -p, --target_platform arg     choose the target platform: automatic|cpu|gpu_nvidia|gpu_amd|gpu_intel (default: automatic)
       --sycl_kernel_invocation_type arg
                                 choose the kernel invocation type when using SYCL as backend: automatic|nd_range (default: automatic)
@@ -471,6 +523,7 @@ The `--target_platform=automatic` option works for the different backends as fol
 - `HIP`: always selects an AMD GPU (if no AMD GPU is available, throws an exception)
 - `OpenCL`: tries to find available devices in the following order: NVIDIA GPUs 🠦 AMD GPUs 🠦 Intel GPUs 🠦 CPU
 - `SYCL`: tries to find available devices in the following order: NVIDIA GPUs 🠦 AMD GPUs 🠦 Intel GPUs 🠦 CPU
+- `stdpar`: target device must be selected at compile time (using `PLSSVM_TARGET_PLATFORMS`) or using environment variables at runtime
 
 The `--sycl_kernel_invocation_type` and `--sycl_implementation_type` flags are only used if the `--backend` is `sycl`, otherwise a warning is emitted on `stderr`.
 If the `--sycl_kernel_invocation_type` is `automatic`, the `nd_range` invocation type is currently always used.
@@ -489,7 +542,7 @@ LS-SVM with multiple (GPU-)backends
 Usage:
   ./plssvm-predict [OPTION...] test_file model_file [output_file]
 
-  -b, --backend arg             choose the backend: automatic|openmp|cuda|hip|opencl|sycl (default: automatic)
+  -b, --backend arg             choose the backend: automatic|openmp|cuda|hip|opencl|sycl|stdpar (default: automatic)
   -p, --target_platform arg     choose the target platform: automatic|cpu|gpu_nvidia|gpu_amd|gpu_intel (default: automatic)
       --sycl_implementation_type arg
                                 choose the SYCL implementation to be used in the SYCL backend: automatic|dpcpp|adaptivecpp (default: automatic)

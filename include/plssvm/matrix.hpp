@@ -20,9 +20,10 @@
 #include "plssvm/shape.hpp"                                        // plssvm::shape
 #include "plssvm/verbosity_levels.hpp"                             // plssvm::verbosity_level
 
+#include "fmt/base.h"     // fmt::formatter
 #include "fmt/color.h"    // fmt::fg, fmt::color::orange
-#include "fmt/core.h"     // fmt::format
-#include "fmt/ostream.h"  // fmt::formatter, fmt::ostream_formatter
+#include "fmt/format.h"   // fmt::format, fmt::runtime
+#include "fmt/ostream.h"  // fmt::ostream_formatter
 
 #include <algorithm>    // std::equal, std::all_of, std::fill_n
 #include <cstddef>      // std::size_t
@@ -756,7 +757,7 @@ inline std::ostream &operator<<(std::ostream &out, const matrix<T, layout> &matr
     using size_type = typename matrix<T, layout>::size_type;
     for (size_type row = 0; row < matr.num_rows(); ++row) {
         for (size_type col = 0; col < matr.num_cols(); ++col) {
-            out << fmt::format("{:.10e} ", matr(row, col));
+            out << fmt::format(fmt::runtime("{:.10e} "), matr(row, col));
         }
         if (row < matr.num_rows() - 1) {
             out << '\n';
@@ -968,7 +969,7 @@ template <typename T, layout_type layout>
  * @return the newly scaled matrix (`[[nodiscard]]`)
  */
 template <typename T, layout_type layout>
-[[nodiscard]] matrix<T, layout> masked_rowwise_scale(const std::vector<int> &mask, const std::vector<T> &scale, matrix<T, layout> matr) {
+[[nodiscard]] matrix<T, layout> masked_rowwise_scale(const std::vector<unsigned long long> &mask, const std::vector<T> &scale, matrix<T, layout> matr) {
     PLSSVM_ASSERT(scale.size() == matr.num_rows(), "Error: shapes missmatch! ({} != {} (num_rows))", scale.size(), matr.num_rows());
     PLSSVM_ASSERT(mask.size() == matr.num_rows(), "Error: shapes missmatch! ({} != {} (num_rows))", mask.size(), matr.num_rows());
     using size_type = typename matrix<T, layout>::size_type;

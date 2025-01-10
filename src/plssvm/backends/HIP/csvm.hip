@@ -22,7 +22,7 @@
 #include "plssvm/detail/data_distribution.hpp"                                         // plssvm::detail::{data_distribution, triangular_data_distribution, rectangular_data_distribution}
 #include "plssvm/detail/logging.hpp"                                                   // plssvm::detail::log
 #include "plssvm/detail/memory_size.hpp"                                               // plssvm::detail::memory_size
-#include "plssvm/detail/performance_tracker.hpp"                                       // plssvm::detail::tracking_entry
+#include "plssvm/detail/tracking/performance_tracker.hpp"                              // plssvm::detail::tracking::tracking_entry
 #include "plssvm/exceptions/exceptions.hpp"                                            // plssvm::exception
 #include "plssvm/gamma.hpp"                                                            // plssvm::gamma_type
 #include "plssvm/kernel_function_types.hpp"                                            // plssvm::kernel_function_type
@@ -33,8 +33,7 @@
 
 #include "hip/hip_runtime_api.h"  // HIP runtime functions
 
-#include "fmt/core.h"     // fmt::format
-#include "fmt/ostream.h"  // can use fmt using operator<< overloads
+#include "fmt/format.h"  // fmt::format
 
 #include <cmath>      // std::ceil
 #include <cstddef>    // std::size_t
@@ -57,22 +56,39 @@ csvm::csvm(target_platform target, parameter params) :
 
 void csvm::init(const target_platform target) {
     // check if supported target platform has been selected
+#if defined(PLSSVM_HIP_BACKEND_USE_HIP_RUNTIME)
     if (target != target_platform::automatic && target != target_platform::gpu_amd) {
-        throw backend_exception{ fmt::format("Invalid target platform '{}' for the HIP backend!", target) };
+        throw backend_exception{ fmt::format("Invalid target platform '{}' for the HIP backend using the HIP runtime!", target) };
     } else {
-#if !defined(PLSSVM_HAS_AMD_TARGET)
+    #if !defined(PLSSVM_HAS_AMD_TARGET)
         throw backend_exception{ fmt::format("Requested target platform 'gpu_amd' that hasn't been enabled using PLSSVM_TARGET_PLATFORMS!", target) };
-#endif
+    #endif
     }
+#elif defined(PLSSVM_HIP_BACKEND_USE_CUDA_RUNTIME)
+    if (target != target_platform::automatic && target != target_platform::gpu_nvidia) {
+        throw backend_exception{ fmt::format("Invalid target platform '{}' for the HIP backend using the CUDA runtime!", target) };
+    } else {
+    #if !defined(PLSSVM_HAS_NVIDIA_TARGET)
+        throw backend_exception{ fmt::format("Requested target platform 'gpu_nvidia' that hasn't been enabled using PLSSVM_TARGET_PLATFORMS!", target) };
+    #endif
+    }
+#endif
 
     plssvm::detail::log(verbosity_level::full,
-                        "\nUsing HIP ({}) as backend.\n",
-                        plssvm::detail::tracking_entry{ "dependencies", "hip_runtime_version", detail::get_runtime_version() });
-    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "backend", "backend", plssvm::backend_type::hip }));
-    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "backend", "target_platform", plssvm::target_platform::gpu_amd }));
+                        "\nUsing HIP ({}; runtime: {}) as backend.\n",
+                        plssvm::detail::tracking::tracking_entry{ "dependencies", "hip_runtime_version", detail::get_runtime_version() },
+                        plssvm::detail::tracking::tracking_entry{ "dependencies", "hip_runtime", detail::get_runtime() });
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "backend", "backend", plssvm::backend_type::hip }));
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "backend", "target_platform", plssvm::target_platform::gpu_amd }));
 
     // update the target platform
-    target_ = plssvm::target_platform::gpu_amd;
+    if (target_ == target_platform::automatic) {
+#if defined(PLSSVM_HIP_BACKEND_USE_HIP_RUNTIME)
+        target_ = plssvm::target_platform::gpu_amd;
+#elif defined(PLSSVM_HIP_BACKEND_USE_CUDA_RUNTIME)
+        target_ = plssvm::target_platform::gpu_nvidia;
+#endif
+    }
 
     // get all available devices wrt the requested target platform
     devices_.resize(static_cast<std::vector<queue_type>::size_type>(detail::get_device_count()));
@@ -86,7 +102,7 @@ void csvm::init(const target_platform target) {
     // print found HIP devices
     plssvm::detail::log(verbosity_level::full,
                         "Found {} HIP device(s):\n",
-                        plssvm::detail::tracking_entry{ "backend", "num_devices", devices_.size() });
+                        plssvm::detail::tracking::tracking_entry{ "backend", "num_devices", devices_.size() });
     std::vector<std::string> device_names;
     device_names.reserve(devices_.size());
     for (const queue_type &device : devices_) {
@@ -100,7 +116,7 @@ void csvm::init(const target_platform target) {
                             prop.minor);
         device_names.emplace_back(prop.name);
     }
-    PLSSVM_DETAIL_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking_entry{ "backend", "device", device_names }));
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((plssvm::detail::tracking::tracking_entry{ "backend", "device", device_names }));
     plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
                         "\n");
 }
@@ -149,7 +165,7 @@ std::size_t csvm::get_max_work_group_size(const std::size_t device_id) const {
 //                        fit                        //
 //***************************************************//
 
-auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const parameter &params, const device_ptr_type &data_d, const device_ptr_type &q_red_d, real_type QA_cost) const -> device_ptr_type {
+auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, const ::plssvm::detail::execution_range &exec, const parameter &params, const bool use_usm_allocations, const device_ptr_type &data_d, const device_ptr_type &q_red_d, real_type QA_cost) const -> device_ptr_type {
     const unsigned long long num_rows_reduced = data_d.shape().x - 1;
     const unsigned long long num_features = data_d.shape().y;
     const queue_type &device = devices_[device_id];
@@ -164,7 +180,9 @@ auto csvm::run_assemble_kernel_matrix_explicit(const std::size_t device_id, cons
     const ::plssvm::detail::triangular_data_distribution &dist = dynamic_cast<::plssvm::detail::triangular_data_distribution &>(*data_distribution_);
     const std::size_t num_entries_padded = dist.calculate_explicit_kernel_matrix_num_entries_padded(device_id);
 
-    device_ptr_type kernel_matrix_d{ num_entries_padded, device };  // only explicitly store the upper triangular matrix
+    // if solver == solver_type::cg_explicit: store it explicitly
+    // if solver == solver_type::cg_streaming: store it using USM
+    device_ptr_type kernel_matrix_d{ num_entries_padded, device, use_usm_allocations };
     const real_type cost_factor = real_type{ 1.0 } / params.cost;
 
     // convert execution range block to HIP's native dim3

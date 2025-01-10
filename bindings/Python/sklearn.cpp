@@ -10,7 +10,7 @@
 
 #include "bindings/Python/utility.hpp"  // check_kwargs_for_correctness, assemble_unique_class_name, pyarray_to_vector, pyarray_to_matrix
 
-#include "fmt/core.h"            // fmt::format
+#include "fmt/format.h"          // fmt::format
 #include "pybind11/numpy.h"      // support for STL types
 #include "pybind11/operators.h"  // support for operators
 #include "pybind11/pybind11.h"   // py::module_, py::class_, py::init, py::arg, py::return_value_policy, py::self
@@ -66,6 +66,10 @@ void parse_provided_params(svc &self, const py::kwargs &args) {
             kernel = plssvm::kernel_function_type::rbf;
         } else if (kernel_str == "sigmoid") {
             kernel = plssvm::kernel_function_type::sigmoid;
+	} else if (kernel_str == "laplacian") {
+	    kernel = plssvm::kernel_function_type::laplacian;
+	} else if (kernel_str == "chi_squared") {
+	    kernel = plssvm::kernel_function_type::chi_squared;
         } else if (kernel_str == "precomputed") {
             throw py::attribute_error{ R"(The "kernel = 'precomputed'" parameter for a call to the 'SVC' constructor is not implemented yet!)" };
         } else {

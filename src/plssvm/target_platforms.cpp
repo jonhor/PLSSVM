@@ -8,6 +8,7 @@
 
 #include "plssvm/target_platforms.hpp"
 
+#include "plssvm/detail/assert.hpp"          // PLSSVM_ASSERT
 #include "plssvm/detail/string_utility.hpp"  // plssvm::detail::to_lower_case
 #include "plssvm/detail/utility.hpp"         // plssvm::detail::contains
 
@@ -33,6 +34,10 @@ std::vector<target_platform> list_available_target_platforms() {
 #if defined(PLSSVM_HAS_INTEL_TARGET)
     available_targets.push_back(target_platform::gpu_intel);
 #endif
+
+    // automatic is ALWAYS available but AT LEAST ONE other target must be available in addition
+    PLSSVM_ASSERT(available_targets.size() > 1, "Besides \"automatic\" at least one other target must be available!");
+
     return available_targets;
 }
 
@@ -69,7 +74,7 @@ std::istream &operator>>(std::istream &in, target_platform &target) {
     in >> str;
     detail::to_lower_case(str);
 
-    if (str == "automatic") {
+    if (str == "automatic" || str == "auto") {
         target = target_platform::automatic;
     } else if (str == "cpu") {
         target = target_platform::cpu;

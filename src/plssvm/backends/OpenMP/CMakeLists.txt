@@ -67,13 +67,13 @@ target_link_libraries(${PLSSVM_OPENMP_BACKEND_LIBRARY_NAME} PUBLIC ${PLSSVM_BASE
 
 # set compile definition that the OpenMP backend is available
 target_compile_definitions(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC PLSSVM_HAS_OPENMP_BACKEND)
+target_compile_definitions(${PLSSVM_OPENMP_BACKEND_LIBRARY_NAME} PUBLIC PLSSVM_HAS_OPENMP_BACKEND)
 
 # link against interface library
 target_link_libraries(${PLSSVM_ALL_LIBRARY_NAME} INTERFACE ${PLSSVM_OPENMP_BACKEND_LIBRARY_NAME})
 
 # mark backend library as install target
-list(APPEND PLSSVM_TARGETS_TO_INSTALL "${PLSSVM_OPENMP_BACKEND_LIBRARY_NAME}")
-set(PLSSVM_TARGETS_TO_INSTALL ${PLSSVM_TARGETS_TO_INSTALL} PARENT_SCOPE)
+append_local_and_parent(PLSSVM_TARGETS_TO_INSTALL ${PLSSVM_OPENMP_BACKEND_LIBRARY_NAME})
 
 # generate summary string
 set(PLSSVM_OPENMP_BACKEND_SUMMARY_STRING " - OpenMP: cpu " PARENT_SCOPE)

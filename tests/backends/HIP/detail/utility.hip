@@ -9,6 +9,7 @@
  */
 
 #include "plssvm/backends/HIP/detail/utility.hip.hpp"
+// main header
 
 #include "plssvm/backends/execution_range.hpp"  // plssvm::detail::dim_type
 #include "plssvm/backends/HIP/exceptions.hpp"   // plssvm::hip::backend_exception
@@ -18,7 +19,7 @@
 
 #include "tests/custom_test_macros.hpp"  // EXPECT_THROW_WHAT, EXPECT_THROW_WHAT_MATCHER
 
-#include "fmt/core.h"     // fmt::format
+#include "fmt/format.h"   // fmt::format
 #include "gmock/gmock.h"  // ::testing::StartsWith
 #include "gtest/gtest.h"  // TEST, EXPECT_GE, EXPECT_NO_THROW
 
@@ -29,9 +30,15 @@ TEST(HIPUtility, error_check) {
     EXPECT_NO_THROW(PLSSVM_HIP_ERROR_CHECK(hipSuccess));
 
     // any other code must throw
+#if defined(PLSSVM_HIP_BACKEND_USE_HIP_RUNTIME)
     EXPECT_THROW_WHAT_MATCHER(PLSSVM_HIP_ERROR_CHECK(hipErrorInvalidValue),
                               plssvm::hip::backend_exception,
                               ::testing::StartsWith("HIP assert 'hipErrorInvalidValue' (1):"));
+#elif defined(PLSSVM_HIP_BACKEND_USE_CUDA_RUNTIME)
+    EXPECT_THROW_WHAT_MATCHER(PLSSVM_HIP_ERROR_CHECK(hipErrorInvalidValue),
+                              plssvm::hip::backend_exception,
+                              ::testing::StartsWith("HIP assert 'cudaErrorInvalidValue' (1):"));
+#endif
 }
 
 TEST(HIPUtility, dim_type_to_native) {
@@ -69,4 +76,9 @@ TEST(HIPUtility, device_synchronize) {
 TEST(HIPUtility, get_runtime_version) {
     const std::regex reg{ "[0-9]+\\.[0-9]+", std::regex::extended };
     EXPECT_TRUE(std::regex_match(plssvm::hip::detail::get_runtime_version(), reg));
+}
+
+TEST(HIPUtility, get_runtime) {
+    const std::regex reg{ "HIP|CUDA", std::regex::extended };
+    EXPECT_TRUE(std::regex_match(plssvm::hip::detail::get_runtime(), reg));
 }

@@ -18,6 +18,12 @@ namespace py = pybind11;
 // forward declare binding functions
 void init_verbosity_levels(py::module_ &);
 void init_performance_tracker(py::module_ &);
+void init_events(py::module_ &);
+void init_hardware_sampler(py::module_ &, const py::exception<plssvm::exception> &);
+void init_cpu_hardware_sampler(py::module_ &);
+void init_gpu_nvidia_hardware_sampler(py::module_ &);
+void init_gpu_amd_hardware_sampler(py::module_ &);
+void init_gpu_intel_hardware_sampler(py::module_ &);
 void init_target_platforms(py::module_ &);
 void init_solver_types(py::module_ &);
 void init_backend_types(py::module_ &);
@@ -33,6 +39,7 @@ void init_version(py::module_ &);
 void init_exceptions(py::module_ &, const py::exception<plssvm::exception> &);
 void init_csvm(py::module_ &);
 void init_openmp_csvm(py::module_ &, const py::exception<plssvm::exception> &);
+void init_stdpar_csvm(py::module_ &, const py::exception<plssvm::exception> &);
 void init_cuda_csvm(py::module_ &, const py::exception<plssvm::exception> &);
 void init_hip_csvm(py::module_ &, const py::exception<plssvm::exception> &);
 void init_opencl_csvm(py::module_ &, const py::exception<plssvm::exception> &);
@@ -56,7 +63,26 @@ PYBIND11_MODULE(plssvm, m) {
 
     // NOTE: the order matters. DON'T CHANGE IT!
     init_verbosity_levels(m);
+
+    // init performance tracking and hardware sampling bindings if the functionality has been enabled
+#if defined(PLSSVM_PERFORMANCE_TRACKER_ENABLED)
     init_performance_tracker(m);
+    init_events(m);
+    init_hardware_sampler(m, base_exception);
+#endif
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_CPUS_ENABLED)
+    init_cpu_hardware_sampler(m);
+#endif
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_NVIDIA_GPUS_ENABLED)
+    init_gpu_nvidia_hardware_sampler(m);
+#endif
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_AMD_GPUS_ENABLED)
+    init_gpu_amd_hardware_sampler(m);
+#endif
+#if defined(PLSSVM_HARDWARE_TRACKING_FOR_INTEL_GPUS_ENABLED)
+    init_gpu_intel_hardware_sampler(m);
+#endif
+
     init_target_platforms(m);
     init_solver_types(m);
     init_backend_types(m);
@@ -75,6 +101,9 @@ PYBIND11_MODULE(plssvm, m) {
     // init bindings for the specific backends ONLY if the backend has been enabled
 #if defined(PLSSVM_HAS_OPENMP_BACKEND)
     init_openmp_csvm(m, base_exception);
+#endif
+#if defined(PLSSVM_HAS_STDPAR_BACKEND)
+    init_stdpar_csvm(m, base_exception);
 #endif
 #if defined(PLSSVM_HAS_CUDA_BACKEND)
     init_cuda_csvm(m, base_exception);

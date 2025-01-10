@@ -10,7 +10,7 @@
 
 #include "plssvm/exceptions/source_location.hpp"  // plssvm::source_location
 
-#include "fmt/core.h"  // fmt::format
+#include "fmt/format.h"  // fmt::format
 
 #include <stdexcept>    // std::runtime_error
 #include <string>       // std::string
@@ -74,5 +74,8 @@ classification_report_exception::classification_report_exception(const std::stri
 
 platform_devices_empty::platform_devices_empty(const std::string &msg, source_location loc) :
     exception{ msg, "platform_devices_empty", loc } { }
+
+hardware_sampling_exception::hardware_sampling_exception(const std::string &msg, source_location loc) :
+    exception{ msg, "hardware_sampling_exception", loc } { }
 
 }  // namespace plssvm
