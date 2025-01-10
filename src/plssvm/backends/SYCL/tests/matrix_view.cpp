@@ -106,7 +106,7 @@ TEST(MatrixView, Lower_PaddedIndexing) {
 
 /*
  * *******************************
- * * Shared Functionality
+ * * Utility Functions
  * *******************************
  */
 TEST(UtilityFunctions, CreateManagedView) {
@@ -114,6 +114,21 @@ TEST(UtilityFunctions, CreateManagedView) {
     ::sycl::queue queue{ selector };
 
     auto A = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+
+    EXPECT_EQ(A(0, 0), 5);
+    EXPECT_EQ(A(1, 0), 3);
+    EXPECT_EQ(A(1, 1), 9);
+    EXPECT_EQ(A(2, 0), 7);
+    EXPECT_EQ(A(2, 1), 4);
+    EXPECT_EQ(A(2, 2), 2);
+}
+
+TEST(UtilityFunctions, Copy) {
+    ::sycl::default_selector selector;
+    ::sycl::queue queue{ selector };
+
+    auto M = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+    auto A = utility::copy(queue, M.view());
 
     EXPECT_EQ(A(0, 0), 5);
     EXPECT_EQ(A(1, 0), 3);
@@ -136,32 +151,47 @@ TEST(UtilityFunctions, Zeros) {
     }
 }
 
-TEST(UtilityFunctions, Transpose_FromLower) {
+TEST(UtilityFunctions, TransposeGeneral) {
     ::sycl::default_selector selector;
     ::sycl::queue queue{ selector };
 
-    auto A = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+    auto A = utility::create_managed_view<matrix_type::general>(queue, { 1, 2, 3, 4, 5, 6 }, 3, 2, PADDING_SIZE);
     auto AT = utility::transpose(queue, A);
 
-    EXPECT_EQ(AT(0, 0), 5);
-    EXPECT_EQ(AT(0, 1), 3);
-    EXPECT_EQ(AT(0, 2), 7);
-    EXPECT_EQ(AT(1, 1), 9);
-    EXPECT_EQ(AT(1, 2), 4);
-    EXPECT_EQ(AT(2, 2), 2);
+    for (auto i = 0; i < A->n_rows; ++i) {
+        for (auto j = 0; j < A->n_cols; ++j) {
+            EXPECT_EQ(A(i, j), AT(j, i));
+        }
+    }
 }
 
-TEST(UtilityFunctions, Transpose_FromUpper) {
-    ::sycl::default_selector selector;
-    ::sycl::queue queue{ selector };
-
-    auto A = utility::create_managed_view<matrix_type::upper>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
-    auto AT = utility::transpose(queue, A);
-
-    EXPECT_EQ(AT(0, 0), 5);
-    EXPECT_EQ(AT(1, 0), 3);
-    EXPECT_EQ(AT(1, 1), 7);
-    EXPECT_EQ(AT(2, 0), 9);
-    EXPECT_EQ(AT(2, 1), 4);
-    EXPECT_EQ(AT(2, 2), 2);
-}
+//
+// TEST(UtilityFunctions, Transpose_FromLower) {
+//    ::sycl::default_selector selector;
+//    ::sycl::queue queue{ selector };
+//
+//    const auto A = utility::create_managed_view<matrix_type::lower>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+//    auto AT = utility::transpose(queue, A);
+//
+//    EXPECT_EQ(AT(0, 0), 5);
+//    EXPECT_EQ(AT(0, 1), 3);
+//    EXPECT_EQ(AT(0, 2), 7);
+//    EXPECT_EQ(AT(1, 1), 9);
+//    EXPECT_EQ(AT(1, 2), 4);
+//    EXPECT_EQ(AT(2, 2), 2);
+//}
+//
+// TEST(UtilityFunctions, Transpose_FromUpper) {
+//    ::sycl::default_selector selector;
+//    ::sycl::queue queue{ selector };
+//
+//    auto A = utility::create_managed_view<matrix_type::upper>(queue, { 5, 3, 9, 7, 4, 2 }, 3, 3);
+//    auto AT = utility::transpose(queue, A);
+//
+//    EXPECT_EQ(AT(0, 0), 5);
+//    EXPECT_EQ(AT(1, 0), 3);
+//    EXPECT_EQ(AT(1, 1), 7);
+//    EXPECT_EQ(AT(2, 0), 9);
+//    EXPECT_EQ(AT(2, 1), 4);
+//    EXPECT_EQ(AT(2, 2), 2);
+//}

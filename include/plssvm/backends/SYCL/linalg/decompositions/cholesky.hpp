@@ -7,8 +7,6 @@
 
 #include "sycl/sycl.hpp"
 
-// try block based updates with the right dag?
-
 namespace plssvm::sycl::linalg {
 
 class cholesky_decomposition {
@@ -17,7 +15,6 @@ class cholesky_decomposition {
         queue_(queue),
         A_(A),
         U_matrix(empty<matrix_type::upper>(queue, A.n_rows, A.n_rows, A.padding)),
-        // U_(U_matrix.view()),
         block_size_(block_size == 0 ? BLOCK_SIZE : block_size) {
     }
 
@@ -47,7 +44,6 @@ class cholesky_decomposition {
 
             // solve all trailing blocks in the same row
             start_time = std::chrono::steady_clock::now();
-            // #pragma omp_parallel
             for (std::size_t col_offset = row_offset + block_size_; col_offset < N; col_offset += block_size_) {
                 solve_block(row_offset, col_offset);
             }
@@ -57,9 +53,7 @@ class cholesky_decomposition {
 
             // update the blocks in the trailing submatrix
             start_time = std::chrono::steady_clock::now();
-            // omp_parallel!
             for (std::size_t trailing_row_offset = row_offset + block_size_; trailing_row_offset < N; trailing_row_offset += block_size_) {
-                // TODO this can be calculated directly
                 std::size_t blocks_in_row = 0;
                 for (std::size_t col = trailing_row_offset; col < N; col += block_size_) {
                     blocks_in_row += 1;
@@ -133,8 +127,8 @@ class cholesky_decomposition {
 
                     // only one thread accesses and updates the diagonal element of the current row.
                     if (row == 0 && col == 0) {
-                        auto diag_element = ::sycl::max(cache[current_row][current_row], smallest_eps);
-                        cache[current_row][current_row] = ::sycl::sqrt(diag_element);
+                        auto diag_element = std::max(cache[current_row][current_row], smallest_eps);
+                        cache[current_row][current_row] = std::sqrt(diag_element);
                     }
                     item.barrier(::sycl::access::fence_space::local_space);
 
@@ -184,7 +178,7 @@ class cholesky_decomposition {
                 // transpose the data in the diagonal block to perform a forward substitution
                 if (row <= col) {
                     d_cache[col][row] = U_(global_row, diag_col);
-                }  // TODO amd else memory is not nulled
+                }
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 for (std::size_t current_row = 0; current_row < N; ++current_row) {

@@ -87,6 +87,7 @@ nvidia_compute_capability_mapping = {
     "GeForce RTX 4090": "sm_89",
     "GeForce RTX 4080": "sm_89",
     "GeForce RTX 4070 Ti": "sm_89",
+    "GeForce RTX 4070": "sm_89",
     "GeForce RTX 3060": "sm_86",
     "GeForce RTX 3090": "sm_86",
     "GeForce RTX 3090 Ti": "sm_86",

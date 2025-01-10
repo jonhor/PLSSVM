@@ -14,7 +14,7 @@ using linalg::matrix_view, linalg::matrix, linalg::matrix_type;
 
 class cholesky_preconditioner : public sycl_preconditioner {
     cholesky_preconditioner(::sycl::queue &queue, matrix<matrix_type::upper> &&M) :
-        sycl_preconditioner(queue),
+        sycl_preconditio  // TODO amd else memory is not nulledner(queue),
         M_(std::move(M)),
         MT_(linalg::transposed(queue, M_)) { }
 
@@ -22,7 +22,6 @@ class cholesky_preconditioner : public sycl_preconditioner {
         linalg::triangular_solve_lower_gpu(queue_, MT_.view(), B);
         linalg::triangular_solve_upper_gpu(queue_, M_.view(), B);
         queue_.memcpy(C.data(), B.data(), C.size_bytes_padded()).wait();
-        // linalg::triangular_solve_upper(queue_, M_.view(), B, C);
     }
 
     matrix<matrix_type::upper> M_;
