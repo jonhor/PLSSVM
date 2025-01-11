@@ -147,7 +147,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     };
 
     while (iter < max_cg_iter && num_rhs_converged() < num_rhs) {
-        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT(fmt::format("cg iter {} start", iter));
+        // PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_EVENT(fmt::format("cg iter {} start", iter));
 
         const std::size_t max_residual_difference_idx = rhs_idx_max_residual_difference();
         detail::log(verbosity_level::full | verbosity_level::timing,
