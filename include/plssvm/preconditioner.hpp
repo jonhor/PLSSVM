@@ -23,9 +23,13 @@ class preconditioner {
 
     /**
      * This function can be used to query whether the preconditioner provides a custom product function.
-     * This is not the cleanest design but will do for now.
      */
     virtual bool has_custom_product() { return false; }
+
+    /**
+     * This function can be used to query whether the residuals should be recalculated every X iterations.
+     */
+    virtual bool recalculate_residuals() { return true; }
 
     virtual ~preconditioner() { }
 };

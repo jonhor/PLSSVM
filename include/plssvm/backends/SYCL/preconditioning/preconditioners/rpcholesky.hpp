@@ -55,6 +55,10 @@ class rpcholesky_preconditioner : public sycl_preconditioner {
         return true;
     }
 
+    virtual bool recalculate_residuals() override {
+        return false;
+    }
+
     matrix_view<matrix_type::symmetric> K_;
     matrix<matrix_type::general> M_;
     const real_type c_;

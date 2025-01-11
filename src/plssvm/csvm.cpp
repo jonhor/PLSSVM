@@ -75,6 +75,8 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     unsigned long long iter = 0;
     std::vector<unsigned long long> num_iters(num_rhs, 1);
 
+    const bool preconditioned{ P.has_value() };
+
     //
     // perform Conjugate Gradients (CG) algorithm
     //
@@ -87,7 +89,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     // if P: D = M * R
     // else: D = R
     soa_matrix<real_type> D{ R, shape{ PADDING_SIZE, PADDING_SIZE } };
-    if (P.has_value()) {
+    if (preconditioned) {
         // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, R, real_type{ 0.0 }, D);
         total_preconditioner_application_time += (*P)->apply(R, D);
     }
@@ -164,7 +166,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
 
         // Q = A * D
         soa_matrix<real_type> Q{ shape{ D.num_rows(), D.num_cols() }, shape{ PADDING_SIZE, PADDING_SIZE } };
-        if (P.has_value() && (*P)->has_custom_product()) {
+        if (preconditioned && (*P)->has_custom_product()) {
             total_blas_level_3_time += (*P)->custom_product(D, Q);
         } else {
             total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, A, D, real_type{ 0.0 }, Q);
@@ -176,7 +178,9 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
         // X = X + alpha * D
         X += masked_rowwise_scale(mask, alpha, D);
 
-        if (iter % 50 == 49) {
+        bool recalculate{ iter % 50 == 49 };
+        bool preconditioner_wants_recalculation{ preconditioned && (*P)->recalculate_residuals() };
+        if ((recalculate && !preconditioned) || (recalculate && preconditioner_wants_recalculation)) {
             // explicitly recalculate residual to remove accumulating floating point errors
             // R = B - A * X
             R = soa_matrix<real_type>{ B, shape{ PADDING_SIZE, PADDING_SIZE } };
@@ -192,7 +196,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
         // if P: delta_new = R.T * S, where S = M * R
         // else: delta_new = R.T * R
         soa_matrix<real_type> S{ D.shape(), D.padding() };
-        if (P.has_value()) {
+        if (preconditioned) {
             total_preconditioner_application_time += (*P)->apply(R, S);
             delta = rowwise_dot(R, S);
         } else {
@@ -204,7 +208,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
 
         // if M: D = beta * D + S
         // else: D = beta * D + R
-        if (P.has_value()) {
+        if (preconditioned) {
             D = rowwise_scale(beta, D) + S;
         } else {
             D = rowwise_scale(beta, D) + R;
