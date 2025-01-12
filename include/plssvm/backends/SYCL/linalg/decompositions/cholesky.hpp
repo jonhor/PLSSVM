@@ -64,7 +64,6 @@ class cholesky_decomposition {
             end_time = std::chrono::steady_clock::now();
             total_update_time_ += std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         }
-
         return std::move(U_matrix);
     }
 
@@ -107,12 +106,11 @@ class cholesky_decomposition {
                 const auto global_row = row + row_offset;
                 const auto global_col = col + row_offset;
 
-                // only work with the upper triangular part
                 if (row > col) {
-                    return;
+                    cache[row][col] = 0;
+                } else {
+                    cache[row][col] = U_(global_row, global_col);
                 }
-
-                cache[row][col] = U_(global_row, global_col);
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 for (std::size_t current_row = 0; current_row < block_size; ++current_row) {
@@ -139,7 +137,7 @@ class cholesky_decomposition {
                     item.barrier(::sycl::access::fence_space::local_space);
 
                     // update the trailing submatrix
-                    if (row > current_row) {
+                    if (row > current_row && col >= row) {
                         cache[row][col] -= cache[current_row][row] * cache[current_row][col];
                     }
                     item.barrier(::sycl::access::fence_space::local_space);
