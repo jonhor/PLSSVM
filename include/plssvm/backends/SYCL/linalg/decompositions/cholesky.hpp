@@ -143,7 +143,9 @@ class cholesky_decomposition {
                     item.barrier(::sycl::access::fence_space::local_space);
                 }
 
-                U_(global_row, global_col) = cache[row][col];
+                if (col >= row) {
+                    U_(global_row, global_col) = cache[row][col];
+                }
             });
         });
     }
