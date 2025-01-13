@@ -46,10 +46,13 @@ class cholesky_preconditioner_constructor {
         auto U = cholesky();
 
         plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
-                            "Cholesky decomposition timings:\ntotal factorization time {}.\ntotal solve time: {}.\ntotal_update_time: {}.\n",
+                            "\nCholesky decomposition timings\nblock factorization: {}.\nblock solve: {}.\nblock update: {}.\n",
                             cholesky.total_factorization_time(),
                             cholesky.total_solve_time(),
                             cholesky.total_update_time());
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "factorization_time", cholesky.total_factorization_time() }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "solve_time", cholesky.total_solve_time() }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "update_time", cholesky.total_update_time() }));
 
         return cholesky_preconditioner{ queue_, std::move(U) };
     }

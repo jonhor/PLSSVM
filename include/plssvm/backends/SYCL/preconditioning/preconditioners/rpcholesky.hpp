@@ -6,6 +6,7 @@
 #include "plssvm/backends/SYCL/linalg/constants.hpp"
 #include "plssvm/backends/SYCL/linalg/matrix/matrix.hpp"
 #include "plssvm/backends/SYCL/preconditioning/sycl_preconditioner.hpp"
+#include "plssvm/detail/tracking/performance_tracker.hpp"
 
 #ifndef RUNNING_GTEST
     #include "plssvm/detail/logging.hpp"
@@ -88,18 +89,22 @@ class rpcholesky_preconditioner_constructor {
         end_time = std::chrono::steady_clock::now();
         auto svd_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
+        start_time = std::chrono::steady_clock::now();
         internal::transform_sigma(queue_, S, c_);
-
         auto UT = linalg::transposed(queue_, U);
         auto V = linalg::matrix_multiplication(queue_, U.view(), S.view());
         auto M = linalg::matrix_multiplication(queue_, V.view(), UT.view());
+        end_time = std::chrono::steady_clock::now();
+        auto inverse_approximation_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-#ifndef RUNNING_GTEST
         plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
-                            "Randomly Pivoted Cholesky timings:\nRPCholesky time: {}.\nSVD time: {}.\n",
+                            "\nRandomly Pivoted Cholesky timings\nCompute RPCholesky approximation: {}.\nSVD: {}.\nCompute inverse approximation: {}\n",
                             rpcholesky_time,
-                            svd_time);
-#endif
+                            svd_time,
+                            inverse_approximation_time);
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "compute_approximation", rpcholesky_time }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "svd_compute_time", svd_time }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "compute_inverse_approximation", inverse_approximation_time }));
 
         return rpcholesky_preconditioner{ queue_, K_, std::move(M), c_ };
     }

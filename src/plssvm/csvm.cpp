@@ -70,7 +70,8 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     // timing for each CG iteration
     std::chrono::milliseconds total_iteration_time{};
     std::chrono::milliseconds total_blas_level_3_time{};
-    std::chrono::milliseconds total_preconditioner_application_time{};
+    std::chrono::milliseconds total_conditioner_application_time{};
+    std::chrono::milliseconds total_conditioner_product_time{};
 
     unsigned long long iter = 0;
     std::vector<unsigned long long> num_iters(num_rhs, 1);
@@ -91,7 +92,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     soa_matrix<real_type> D{ R, shape{ PADDING_SIZE, PADDING_SIZE } };
     if (preconditioned) {
         // total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, R, real_type{ 0.0 }, D);
-        total_preconditioner_application_time += (*P)->apply(R, D);
+        total_conditioner_application_time += (*P)->apply(R, D);
     }
 
     // delta = R.T * D
@@ -167,7 +168,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
         // Q = A * D
         soa_matrix<real_type> Q{ shape{ D.num_rows(), D.num_cols() }, shape{ PADDING_SIZE, PADDING_SIZE } };
         if (preconditioned && (*P)->has_custom_product()) {
-            total_blas_level_3_time += (*P)->custom_product(D, Q);
+            total_conditioner_product_time += (*P)->custom_product(D, Q);
         } else {
             total_blas_level_3_time += this->run_blas_level_3(cg_solver, real_type{ 1.0 }, A, D, real_type{ 0.0 }, Q);
         }
@@ -197,7 +198,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
         // else: delta_new = R.T * R
         soa_matrix<real_type> S{ D.shape(), D.padding() };
         if (preconditioned) {
-            total_preconditioner_application_time += (*P)->apply(R, S);
+            total_conditioner_application_time += (*P)->apply(R, S);
             delta = rowwise_dot(R, S);
         } else {
             delta = rowwise_dot(R, R);
@@ -225,6 +226,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
         ++iter;
         num_iters += mask;
     }
+    // TODO track preconditioner application time
 
     const std::size_t max_residual_difference_idx = rhs_idx_max_residual_difference();
     detail::log(verbosity_level::full | verbosity_level::timing,
@@ -238,10 +240,13 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
                 max_residual_difference_idx,
                 detail::tracking::tracking_entry{ "cg", "avg_iteration_time", total_iteration_time / std::max(iter, 1ULL) });
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "blas_level_3_time", total_blas_level_3_time }));
-    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner application time", total_preconditioner_application_time }));
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "residuals", delta }));
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "target_residuals", eps * eps * delta0 }));
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "epsilon", eps }));
+    PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner_application_time", total_conditioner_application_time }));
+    if (preconditioned && (*P)->has_custom_product()) {
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner_product_time", total_conditioner_application_time }));
+    }
     detail::log(verbosity_level::libsvm,
                 "optimization finished, #iter = {}\n",
                 iter);

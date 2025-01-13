@@ -989,16 +989,14 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned l
     std::optional<std::unique_ptr<preconditioner>> P = std::nullopt;
     if (used_preconditioner != preconditioner_type::none) {
         const std::chrono::steady_clock::time_point precondition_assembly_start_time = std::chrono::steady_clock::now();
-
         P = this->construct_preconditioner(used_preconditioner, kernel_matrix, params);
-
         const std::chrono::steady_clock::time_point precondition_assembly_end_time = std::chrono::steady_clock::now();
         const auto precondition_assembly_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precondition_assembly_end_time - precondition_assembly_start_time);
 
         detail::log(verbosity_level::full | verbosity_level::timing,
                     "Assembled the precondition matrix in {}.\n",
                     precondition_assembly_duration);
-        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "precondition_matrix", "precondition_matrix_assembly", precondition_assembly_duration }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "preconditioner", "total_assembly_time", precondition_assembly_duration }));
     }
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "parameter", "preconditioner", used_preconditioner }));
 
