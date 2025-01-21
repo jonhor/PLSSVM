@@ -8,6 +8,7 @@
 
 #include "sycl/sycl.hpp"
 
+#include <execution>
 #include <optional>
 
 namespace plssvm::sycl::linalg {
@@ -21,16 +22,17 @@ class randomly_pivoted_cholesky {
     randomly_pivoted_cholesky(::sycl::queue &queue, const matrix_view<matrix_type::symmetric> &K, unsigned int k = 0) :
         queue_(queue),
         N_(K.n_rows),
-        probabilities_{ ::sycl::range<1>(N_), ::sycl::property::no_init() },
         K_(K),
-        D_(linalg::diagonal(queue, K)),
-        D_host(N_) {
+        D_(linalg::diagonal(queue, K)) {
         if (k == 0) {
             k = std::max(static_cast<unsigned int>(std::sqrt(N_)), 300u);
-            k = std::min(k, static_cast<unsigned int>(static_cast<double>(N_) / 2.0));  // dont oversample
+            k = std::min(k, static_cast<unsigned int>(static_cast<double>(N_) / 2.0));  // don't oversample
         }
 
         k_ = k;
+
+        probabilities_ = ::sycl::malloc_host<real_type>(N_, queue_);
+        queue_.fill<real_type>(probabilities_, 1, N_).wait();
     }
 
     randomly_pivoted_cholesky(::sycl::queue &queue, const matrix_view<matrix_type::symmetric> &A, const matrix_view<matrix_type::general> &pivots, unsigned int k = 0) :
@@ -41,6 +43,10 @@ class randomly_pivoted_cholesky {
         for (std::size_t i = 0; i < pivots.n_cols; ++i) {
             pivots_.push_back(static_cast<std::size_t>(pivots(0, i)));
         }
+    }
+
+    ~randomly_pivoted_cholesky() {
+        ::sycl::free(probabilities_, queue_);
     }
 
     inline matrix<matrix_type::general> operator()() {
@@ -58,12 +64,7 @@ class randomly_pivoted_cholesky {
                 row_idx = pivots_[i];
             } else {
                 update_probabilities();
-
-                // Optimization:
-                // We currently use the C++ stdlib random interface to choose the next row.
-                // In a perfect world this is an operation that can be performed on the computation device.
-                auto probabilities = probabilities_.get_host_access();
-                row_idx = rng.choice<std::size_t>(probabilities.begin(), probabilities.end());
+                row_idx = rng.choice<std::size_t>(probabilities_, probabilities_ + N_);
             }
 
             update_approximation(G_view, i, row_idx);
@@ -75,23 +76,19 @@ class randomly_pivoted_cholesky {
     inline void update_probabilities() {
         auto D = D_.view();
 
-        // Optimization:
-        // This is a reduction operation that can be performed with the SYCL reduction interface.
-        // AdaptiveCpp does not fully support it at the current time.
-        // A showcase on how to implement a reduction operation from scratch can be seen in linalg/norms.hpp (frobenius).
-        // Because of time constraints we copy the data to a host memory location and reduce it with the stdlib interfaces provided by C++.
-        queue_.copy<real_type>(D.data(), D_host.data(), N_);
-        const auto diag_sum = std::reduce(D_host.begin(), D_host.end());
+        queue_.copy<real_type>(D.data(), probabilities_, N_).wait();
+        const auto diag_sum = std::reduce(std::execution::par, probabilities_, probabilities_ + N_);
 
+        auto probabilities = probabilities_;
         auto nd_range = detail::get_uniform_1d_range(N_, MAX_WORKGROUP_SIZE);
         auto event = queue_.submit([&](::sycl::handler &cgh) {
             auto N = N_;
-            auto probabilities = probabilities_.get_access<::sycl::access::mode::discard_write>(cgh);
-            cgh.parallel_for<class rpcholesky_update_probabilities>(nd_range, [=](::sycl::nd_item<1> item) {
-                const auto global_id = item.get_global_id();
+
+            cgh.parallel_for(nd_range, [=](::sycl::nd_item<1> item) {
+                const auto global_id = item.get_global_id(0);
 
                 if (global_id < N) {
-                    probabilities[global_id] = D(global_id, global_id) / diag_sum;
+                    probabilities[global_id] /= diag_sum;
                 }
             });
         });
@@ -99,39 +96,35 @@ class randomly_pivoted_cholesky {
     }
 
     inline void update_approximation(matrix_view<matrix_type::general> &G, std::size_t i, std::size_t row_idx) {
-        // fmt::println("{} iteration", i);
-
         auto D = D_.view();
 
         auto nd_range = detail::get_uniform_1d_range(N_, MAX_WORKGROUP_SIZE);
-        // nd_range_(::sycl::range<1>(K.n_rows), ::sycl::range<1>(BLOCK_SIZE * BLOCK_SIZE)),
-        //  TODO check if d is zero
+        auto smallest_eps = std::numeric_limits<real_type>::epsilon();
+
         auto event = queue_.submit([&](::sycl::handler &cgh) {
             const auto N = N_;
             const auto K = K_;
 
-            cgh.parallel_for<class rpcholesky_update_approximation>(nd_range, [=](::sycl::nd_item<1> item) {
-                // const auto global_id = item.get_global_id();
+            auto d = std::max(D(row_idx, row_idx), smallest_eps);
+            auto d_sqrt = std::sqrt(d);
+            cgh.parallel_for(nd_range, [=](::sycl::nd_item<1> item) {
                 const auto global_id = item.get_global_id(0);
-                const auto d = D(row_idx, row_idx);
 
-                if (global_id >= N) {
-                    return;
+                if (global_id < N) {
+                    // load relevant row r = K[idx, :]
+                    auto r = K(row_idx, global_id);
+
+                    // G[:i, idx].T @ G[:i,:]
+                    auto dot = real_type{ 0 };
+                    for (std::size_t j = 0; j < i; ++j) {
+                        dot += G(j, row_idx) * G(j, global_id);
+                    }
+                    r -= dot;
+
+                    auto g = r / d_sqrt;
+                    D(global_id, global_id) = std::max(real_type{ 0 }, D(global_id, global_id) - g * g);
+                    G(i, global_id) = g;
                 }
-
-                // load relevant row r = K[idx, :]
-                real_type r = K(row_idx, global_id);
-
-                // G[:i, idx].T @ G[:i,:]
-                auto dot = real_type{ 0 };
-                for (std::size_t j = 0; j < i; ++j) {
-                    dot += G(j, row_idx) * G(j, global_id);
-                }
-                r -= dot;
-
-                const auto g = r / std::sqrt(d);
-                D(global_id, global_id) = std::max(real_type{ 0 }, D(global_id, global_id) - g * g);
-                G(i, global_id) = g;
             });
         });
         event.wait();
@@ -142,14 +135,14 @@ class randomly_pivoted_cholesky {
     std::vector<std::size_t> pivots_{};
 
     const std::size_t N_;
-    ::sycl::buffer<real_type, 1> probabilities_;  // probabilities that a specific row from the kernel matrix is chosen to update our approximation
 
     const matrix_view<matrix_type::symmetric> &K_;  // kernel matrix
     const matrix<matrix_type::diagonal> D_;         // diagonal of the kernel matrix
-    std::vector<real_type> D_host;                  // this provides a host memory location for calculating the sum of diagonal elements (can be optimized away).
+    real_type *probabilities_;
 
     unsigned int k_;
 };
+
 }  // namespace plssvm::sycl::linalg
 
 #endif  // PLSSVM_BACKENDS_SYCL_LINALG_RPCHOLESKY_HPP_

@@ -48,7 +48,7 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<T> &A,
                     sum += A_cache[row][i] * B_cache[i][col];
                 }
 
-                // sychronize before loading the next block
+                // synchronize before loading the next block
                 item.barrier(::sycl::access::fence_space::local_space);
             }
 
@@ -83,22 +83,20 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
             const auto global_row = item.get_global_id(0);
             const auto global_col = item.get_global_id(1);
 
-            if (global_row >= N || global_col >= M) {
-                return;
+            if (global_row < N && global_col < M) {
+                // load diagonal elements corresponding to the current row
+                if (local_col == 0) {
+                    diag_cache[local_row] = A(global_row, global_row);
+                }
+                B_cache[local_row][local_col] = B(global_row, global_col);
             }
-
-            // load diagonal elements corresponding to the current row
-            if (local_col == 0) {
-                diag_cache[local_row] = A(global_row, global_row);
-            }
-            B_cache[local_row][local_col] = B(global_row, global_col);
-
             // synchronize to make sure all threads have loaded their data
             item.barrier(::sycl::access::fence_space::local_space);
 
-            real_type value{ diag_cache[local_row] * B_cache[local_row][local_col] };
-
-            C(global_row, global_col) = value;
+            if (global_row < N && global_col < M) {
+                real_type value{ diag_cache[local_row] * B_cache[local_row][local_col] };
+                C(global_row, global_col) = value;
+            }
         });
     });
     event.wait();
@@ -129,21 +127,20 @@ inline void matrix_multiplication(::sycl::queue &queue, const matrix_view<matrix
             const auto global_row = item.get_global_id(0);
             const auto global_col = item.get_global_id(1);
 
-            if (global_row >= N || global_col >= M) {
-                return;
+            if (global_row < N && global_col < M) {
+                if (local_row == 0) {
+                    diag_cache[local_col] = B(global_col, global_col);
+                }
+                A_cache[local_row][local_col] = A(global_row, global_col);
             }
-
-            if (local_row == 0) {
-                diag_cache[local_col] = B(global_col, global_col);
-            }
-            A_cache[local_row][local_col] = A(global_row, global_col);
-
             // synchronize to make sure all threads have loaded their data
             item.barrier(::sycl::access::fence_space::local_space);
 
-            real_type value{ A_cache[local_row][local_col] * diag_cache[local_col] };
+            if (global_row < N && global_col < M) {
+                real_type value{ A_cache[local_row][local_col] * diag_cache[local_col] };
 
-            C(global_row, global_col) = value;
+                C(global_row, global_col) = value;
+            }
         });
     });
     event.wait();
@@ -178,7 +175,9 @@ inline void matrix_addition(::sycl::queue &queue, matrix_view<matrix_type::gener
         const auto global_row = item.get_global_id(0);
         const auto global_col = item.get_global_id(1);
 
-        A(global_row, global_col) += alpha * B(global_row, global_col);
+        if (global_row < N && global_col < M) {
+            A(global_row, global_col) += alpha * B(global_row, global_col);
+        }
     });
     event.wait();
 }

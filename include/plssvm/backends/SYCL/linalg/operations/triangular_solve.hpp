@@ -38,7 +38,6 @@ inline void solve_triangular_lower(::sycl::queue &queue, const matrix_view<matri
             for (std::size_t current_row = 0; current_row < rows_to_solve; ++current_row) {
                 // solve the current row
                 if (row == current_row) {
-                    // std::max(eps, a_cache[current_row][current_row]);
                     b_cache[current_row][col] /= a_cache[current_row][current_row];
                 }
                 item.barrier(::sycl::access::fence_space::local_space);
@@ -88,7 +87,6 @@ inline void solve_triangular_upper(::sycl::queue &queue, const matrix_view<matri
 
                 // solve the current row
                 if (row == current_row) {
-                    // std::max(eps, a_cache[current_row][current_row]);
                     b_cache[current_row][col] /= a_cache[current_row][current_row];
                 }
                 item.barrier(::sycl::access::fence_space::local_space);

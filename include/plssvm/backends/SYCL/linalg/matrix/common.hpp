@@ -43,7 +43,7 @@ template <matrix_type T>
 template <matrix_type T>
 [[nodiscard]] matrix<T> zeros(::sycl::queue &queue, std::size_t n_rows, std::size_t n_cols, std::size_t padding = 0) {
     auto A = empty<T>(queue, n_rows, n_cols, padding);
-    queue.memset(A->data(), 0, A->size_bytes_padded()).wait();
+    queue.fill<real_type>(A->data(), 0, A->size_padded()).wait();
     return A;
 }
 

@@ -44,7 +44,7 @@ namespace kernels {
 
 }  // namespace kernels
 
-inline real_type frobenius(const matrix_view<matrix_type::general> &A, bool full = true) {
+inline real_type frobenius_cpu(const matrix_view<matrix_type::general> &A, bool squared = false) {
     const auto N = A.n_rows;
     const auto M = A.n_cols;
 
@@ -55,7 +55,16 @@ inline real_type frobenius(const matrix_view<matrix_type::general> &A, bool full
         }
     }
 
-    return full ? std::sqrt(sum) : sum;
+    return squared ? sum : std::sqrt(sum);
+}
+
+inline real_type frobenius_cpu(const matrix_view<matrix_type::diagonal> &D, bool squared = false) {
+    real_type sum = real_type{ 0 };
+    for (std::size_t i = 0; i < D.size(); ++i) {
+        sum += D(i, i) * D(i, i);
+    }
+
+    return squared ? sum : std::sqrt(sum);
 }
 
 class frobenius_gpu {
@@ -74,15 +83,15 @@ class frobenius_gpu {
         const auto N = A_.n_rows;
         const auto M = A_.n_cols;
 
-        ::sycl::range<2> global_range(N, M);
-        ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);
-        ::sycl::nd_range<2> nd_range(global_range, local_range);
-
         const auto num_blocks = static_cast<std::size_t>(
             std::ceil(static_cast<double>(N) / static_cast<double>(BLOCK_SIZE)) * std::ceil(static_cast<double>(M) / static_cast<double>(BLOCK_SIZE)));
 
         ::sycl::buffer<real_type> partial_sums{ ::sycl::range<1>{ num_blocks } };
 
+        auto A = A_;
+
+        ::sycl::range<2> local_range(BLOCK_SIZE, BLOCK_SIZE);
+        auto nd_range = detail::get_uniform_2d_range(N, M, BLOCK_SIZE);
         auto sum_event = queue_.submit([&](::sycl::handler &cgh) {
             ::sycl::local_accessor<real_type, 2> local_cache(local_range, cgh);
             auto partial_sum_acc = partial_sums.get_access<::sycl::access_mode::discard_write>(cgh);
@@ -93,7 +102,7 @@ class frobenius_gpu {
                 const auto row = item.get_local_id(0);
                 const auto col = item.get_local_id(1);
 
-                local_cache[row][col] = ::sycl::pow(A_(global_row, global_col), 2);
+                local_cache[row][col] = std::pow(A(global_row, global_col), 2);
                 item.barrier(::sycl::access::fence_space::local_space);
 
                 // perform local reduction across columns

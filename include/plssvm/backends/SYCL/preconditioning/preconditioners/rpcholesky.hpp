@@ -77,6 +77,7 @@ class rpcholesky_preconditioner_constructor {
     rpcholesky_preconditioner operator()() {
         std::chrono::steady_clock::time_point start_time, end_time;
 
+        // Calculate low-rank kernel approximation
         start_time = std::chrono::steady_clock::now();
         auto G = linalg::randomly_pivoted_cholesky{ queue_, K_ }();
         end_time = std::chrono::steady_clock::now();
@@ -84,11 +85,13 @@ class rpcholesky_preconditioner_constructor {
 
         auto F = linalg::transposed(queue_, G);
 
+        // Compute thin SVD
         start_time = std::chrono::steady_clock::now();
         auto [U, S] = linalg::svd(queue_, F);
         end_time = std::chrono::steady_clock::now();
         auto svd_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
+        // Compute the inverse approximation M of K.
         start_time = std::chrono::steady_clock::now();
         internal::transform_sigma(queue_, S, c_);
         auto UT = linalg::transposed(queue_, U);

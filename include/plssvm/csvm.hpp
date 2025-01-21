@@ -983,8 +983,6 @@ std::tuple<aos_matrix<real_type>, std::vector<real_type>, std::vector<unsigned l
     }
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "kernel_matrix", "kernel_matrix_assembly", assembly_duration }));
 
-    // auto j = *(kernel_matrix[0]);
-
     // construct preconditioner (optional)
     std::optional<std::unique_ptr<preconditioner>> P = std::nullopt;
     if (used_preconditioner != preconditioner_type::none) {
