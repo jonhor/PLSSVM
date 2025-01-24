@@ -35,15 +35,19 @@ void transform_sigma(::sycl::queue &queue, matrix_view<matrix_type::diagonal> &S
 }  // namespace internal
 
 class rpcholesky_preconditioner : public sycl_preconditioner {
-    rpcholesky_preconditioner(::sycl::queue &queue, matrix_view<matrix_type::symmetric> &K, matrix<matrix_type::general> &&M, real_type c) :
+    rpcholesky_preconditioner(::sycl::queue &queue, matrix_view<matrix_type::symmetric> &K, matrix<matrix_type::general> &&U, matrix<matrix_type::diagonal> &&S, real_type c) :
         sycl_preconditioner(queue),
         K_(K),
-        M_(std::move(M)),
+        U_(std::move(U)),
+        S_(std::move(S)),
         c_(c) {
     }
 
     virtual void apply(matrix_view<matrix_type::general> &B, matrix_view<matrix_type::general> &C) override {
-        linalg::matrix_multiplication<matrix_type::general>(queue_, M_, B, C);
+        auto UT = linalg::transposed(queue_, U_);
+        linalg::matrix_multiplication(queue_, UT.view(), B, C);
+        auto V = linalg::matrix_multiplication(queue_, S_.view(), C);
+        linalg::matrix_multiplication(queue_, U_.view(), V.view(), C);
         linalg::matrix_addition(queue_, C, real_type{ 1 } / c_, B);
     }
 
@@ -61,7 +65,8 @@ class rpcholesky_preconditioner : public sycl_preconditioner {
     }
 
     matrix_view<matrix_type::symmetric> K_;
-    matrix<matrix_type::general> M_;
+    matrix<matrix_type::general> U_;
+    matrix<matrix_type::diagonal> S_;
     const real_type c_;
 
     friend class rpcholesky_preconditioner_constructor;
@@ -91,25 +96,16 @@ class rpcholesky_preconditioner_constructor {
         end_time = std::chrono::steady_clock::now();
         auto svd_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-        // Compute the inverse approximation M of K.
-        start_time = std::chrono::steady_clock::now();
         internal::transform_sigma(queue_, S, c_);
-        auto UT = linalg::transposed(queue_, U);
-        auto V = linalg::matrix_multiplication(queue_, U.view(), S.view());
-        auto M = linalg::matrix_multiplication(queue_, V.view(), UT.view());
-        end_time = std::chrono::steady_clock::now();
-        auto inverse_approximation_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
         plssvm::detail::log(verbosity_level::full | verbosity_level::timing,
-                            "\nRandomly Pivoted Cholesky timings\nCompute RPCholesky approximation: {}.\nSVD: {}.\nCompute inverse approximation: {}\n",
+                            "\nRandomly Pivoted Cholesky timings\nCompute RPCholesky approximation: {}.\nSVD: {}.\n",
                             rpcholesky_time,
-                            svd_time,
-                            inverse_approximation_time);
+                            svd_time);
         PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "compute_approximation", rpcholesky_time }));
         PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "svd_compute_time", svd_time }));
-        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((::plssvm::detail::tracking::tracking_entry{ "preconditioner", "compute_inverse_approximation", inverse_approximation_time }));
 
-        return rpcholesky_preconditioner{ queue_, K_, std::move(M), c_ };
+        return rpcholesky_preconditioner{ queue_, K_, std::move(U), std::move(S), c_ };
     }
 
   private:

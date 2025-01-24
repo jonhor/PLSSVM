@@ -245,7 +245,7 @@ std::pair<soa_matrix<real_type>, std::vector<unsigned long long>> csvm::conjugat
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "epsilon", eps }));
     PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner_application_time", total_conditioner_application_time }));
     if (preconditioned && (*P)->has_custom_product()) {
-        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner_product_time", total_conditioner_application_time }));
+        PLSSVM_DETAIL_TRACKING_PERFORMANCE_TRACKER_ADD_TRACKING_ENTRY((detail::tracking::tracking_entry{ "cg", "preconditioner_product_time", total_conditioner_product_time }));
     }
     detail::log(verbosity_level::libsvm,
                 "optimization finished, #iter = {}\n",

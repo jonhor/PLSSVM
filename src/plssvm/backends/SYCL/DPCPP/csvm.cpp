@@ -281,6 +281,9 @@ auto csvm::run_construct_preconditioner(const std::size_t device_id, const preco
     const auto data = kernel_matrix_d.get();
 
     auto K = matrix_view<matrix_type::symmetric>(data, order, order, PADDING_SIZE);
+    // fmt::println("writing matrix to file");
+    // linalg::utility::write_matrix_to_file(K, "matrix_saved");
+
     auto &queue = device.impl->sycl_queue;
 
     switch (preconditioner_type) {
