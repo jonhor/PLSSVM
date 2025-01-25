@@ -130,12 +130,12 @@ endif ()
 target_compile_features(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC cxx_std_17)
 ## additional base library compile options
 target_compile_options(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC
-                       $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wdouble-promotion -fno-common -Wshadow -Wcast-qual
-                       -Wnull-dereference -Wnon-virtual-dtor -Wextra-semi -Wunreachable-code -Wuninitialized -Wno-ctor-dtor-privacy
-                       -fPIC>
-                       $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override -Wstrict-null-sentinel -Wlogical-op -Wduplicated-branches -Wimplicit-fallthrough=5>
-                       $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wmost>
-                       $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4 /bigobj /wd4459 /Zc:lambda>>
+        $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wdouble-promotion -fno-common -Wshadow -Wcast-qual
+        -Wnull-dereference -Wnon-virtual-dtor -Wextra-semi -Wunreachable-code -Wuninitialized -Wno-ctor-dtor-privacy
+        -fPIC>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override -Wstrict-null-sentinel -Wlogical-op -Wduplicated-branches -Wimplicit-fallthrough=5>
+        $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wmost>
+        $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4 /bigobj /wd4459 /Zc:lambda>>
 )
 
 ## nvcc doesn't recognize -Werror=??? option, so only set it when using a CXX compiler
@@ -508,14 +508,19 @@ if (OpenMP_FOUND)
 else ()
     # disable warning for unknown OpenMP pragmas if no OpenMP could be found
     target_compile_options(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC
-                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-Wno-unknown-pragmas>
-                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4068>
+            $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-Wno-unknown-pragmas>
+            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4068>
     )
 endif ()
 
 ## setup dependencies
 include(FetchContent)
 list(APPEND CMAKE_MESSAGE_INDENT "Dependencies:  ")
+
+find_package(TBB QUIET)
+if (TBB_FOUND)
+    target_link_libraries(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC TBB::tbb)
+endif ()
 
 ## try finding cxxopts
 set(PLSSVM_cxxopts_VERSION v3.2.0)
@@ -531,15 +536,15 @@ else ()
     set(CXXOPTS_ENABLE_WARNINGS OFF CACHE INTERNAL "" FORCE)
     # fetch command line parser library cxxopts
     FetchContent_Declare(cxxopts
-                         GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
-                         GIT_TAG ${PLSSVM_cxxopts_VERSION}
-                         QUIET
+            GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+            GIT_TAG ${PLSSVM_cxxopts_VERSION}
+            QUIET
     )
     FetchContent_MakeAvailable(cxxopts)
     add_dependencies(${PLSSVM_BASE_LIBRARY_NAME} cxxopts)
     target_include_directories(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC
-                               $<BUILD_INTERFACE:${cxxopts_SOURCE_DIR}/include>
-                               $<INSTALL_INTERFACE:include>
+            $<BUILD_INTERFACE:${cxxopts_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
     )
 endif ()
 
@@ -557,15 +562,15 @@ else ()
     set(FASTFLOAT_SANITIZE OFF CACHE INTERNAL "" FORCE)
     # fetch float parsing library fast_float
     FetchContent_Declare(fast_float
-                         GIT_REPOSITORY https://github.com/fastfloat/fast_float
-                         GIT_TAG ${PLSSVM_fast_float_VERSION}
-                         QUIET
+            GIT_REPOSITORY https://github.com/fastfloat/fast_float
+            GIT_TAG ${PLSSVM_fast_float_VERSION}
+            QUIET
     )
     FetchContent_MakeAvailable(fast_float)
     add_dependencies(${PLSSVM_BASE_LIBRARY_NAME} fast_float)
     target_include_directories(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC
-                               $<BUILD_INTERFACE:${fast_float_SOURCE_DIR}/include>
-                               $<INSTALL_INTERFACE:include>
+            $<BUILD_INTERFACE:${fast_float_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
     )
 endif ()
 
@@ -582,15 +587,15 @@ else ()
     set(IGOR_BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
     # fetch named argument library igor
     FetchContent_Declare(igor
-                         GIT_REPOSITORY https://github.com/bluescarni/igor
-                         GIT_TAG ${PLSSVM_igor_VERSION}
-                         QUIET
+            GIT_REPOSITORY https://github.com/bluescarni/igor
+            GIT_TAG ${PLSSVM_igor_VERSION}
+            QUIET
     )
     FetchContent_MakeAvailable(igor)
     add_dependencies(${PLSSVM_BASE_LIBRARY_NAME} igor)
     target_include_directories(${PLSSVM_BASE_LIBRARY_NAME} PUBLIC
-                               $<BUILD_INTERFACE:${igor_SOURCE_DIR}/include>
-                               $<INSTALL_INTERFACE:include>
+            $<BUILD_INTERFACE:${igor_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
     )
     list(APPEND PLSSVM_TARGETS_TO_INSTALL "igor")
 endif ()
@@ -618,9 +623,9 @@ else ()
     set(FMT_SYSTEM_HEADERS ON CACHE INTERNAL "" FORCE)
     # fetch string formatting library fmt
     FetchContent_Declare(fmt
-                         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-                         GIT_TAG ${PLSSVM_fmt_VERSION}
-                         QUIET
+            GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+            GIT_TAG ${PLSSVM_fmt_VERSION}
+            QUIET
     )
     FetchContent_MakeAvailable(fmt)
     set_property(TARGET fmt PROPERTY POSITION_INDEPENDENT_CODE ON)
